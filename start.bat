@@ -135,6 +135,9 @@ echo   ユーザー名    : salesuser
 echo   パスワード    : salespass (または .env の DB_PASSWORD)
 echo   データベース  : sales_plan
 echo.
+echo [MySQL 外部接続ポート: 3307]
+echo   (ローカルMySQL 3306 との競合回避のため 3307 を使用)
+echo.
 echo [VS Code デバッグ手順]
 echo   1. VS Code で「実行とデバッグ」パネルを開く (Ctrl+Shift+D)
 echo   2. 「Attach to Server (Docker Debug)」を選択して ▶ 実行

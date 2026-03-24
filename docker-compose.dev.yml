@@ -10,7 +10,7 @@ services:
       MYSQL_USER: ${DB_USER:-salesuser}
       MYSQL_PASSWORD: ${DB_PASSWORD:-salespass}
     ports:
-      - "3306:3306"
+      - "3307:3306"  # ホスト3307→コンテナ3306 (ローカルMySQL 3306 との競合回避)
     volumes:
       - mysql_data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone='+09:00'

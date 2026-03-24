@@ -35,8 +35,9 @@ services:
       MYSQL_USER: ${DB_USER:-salesuser}
       MYSQL_PASSWORD: ${DB_PASSWORD:-salespass}
     ports:
-      # 3306 をホストに公開 → Adminer / 外部ツールから直接接続可
-      - "3306:3306"
+      # ホスト3307→コンテナ3306 (ローカルMySQL 3306 との競合回避)
+      # Adminer / 外部ツールから接続する際はポート 3307 を使用
+      - "3307:3306"
     volumes:
       # 開発モードと同じデータボリュームを共有 (データを消さずにデバッグ可)
       - mysql_data_debug:/var/lib/mysql
