@@ -1,15 +1,40 @@
+/**
+ * @file Login.tsx
+ * @description ログインページコンポーネント
+ *
+ * ## 表示条件
+ * 未ログイン時のみ表示される（App.tsx で制御）。
+ * ログイン済みの場合は /dashboard にリダイレクト。
+ *
+ * ## 処理フロー
+ * 1. フォーム送信 → AuthContext.login() を呼ぶ
+ * 2. 成功 → navigate('/dashboard')
+ * 3. 失敗 → エラーメッセージをフォーム内に表示
+ *
+ * ## セキュリティ
+ * - loading 中はボタンを disabled にして二重送信を防止
+ * - エラー詳細（ユーザー不存在 vs パスワード不一致）はサーバー側で区別しない
+ */
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+/**
+ * ログイン画面。
+ * 画面中央に配置したシンプルなフォームのみで構成する。
+ */
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  /** フォーム全体のエラーメッセージ */
   const [error, setError] = useState('');
+  /** API呼び出し中フラグ（ボタン非活性化・テキスト変更に使用） */
   const [loading, setLoading] = useState(false);
 
+  /** フォーム送信ハンドラ */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -48,6 +73,7 @@ export default function Login() {
               className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          {/* エラーメッセージ（認証失敗時のみ表示） */}
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <button
             type="submit"
@@ -57,6 +83,7 @@ export default function Login() {
             {loading ? 'ログイン中...' : 'ログイン'}
           </button>
         </form>
+        {/* 初期認証情報の案内（開発・初期セットアップ用） */}
         <p className="text-xs text-gray-400 text-center mt-4">
           初期: admin / Admin1234!
         </p>

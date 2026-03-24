@@ -1,3 +1,30 @@
+/**
+ * @file ProductManagement.tsx
+ * @description 製品管理ページ
+ *
+ * ## 画面構成（3カラムレイアウト）
+ * | カテゴリ一覧     | 製品一覧              | 製品詳細                    |
+ * |----------------|---------------------|---------------------------|
+ * | カテゴリリスト  | 選択カテゴリの製品リスト | 基本情報 or 価格改定履歴タブ |
+ * | カテゴリ追加   | 製品追加フォーム       | 価格改定フォーム            |
+ *
+ * ## フォーム管理
+ * 3つの独立したフォームをそれぞれ useForm で管理:
+ * - catForm: カテゴリ追加
+ * - prodForm: 製品追加
+ * - priceForm: 価格改定記録
+ *
+ * ## 価格改定の設計
+ * product_price_history は「いつ価格を変更したか」の履歴を記録する。
+ * ただし実際の取引価格は sales に実値を記録するため、
+ * 価格改定後も過去の取引価格は変わらない。
+ * products.default_unit_price / default_cost_price は売上入力時の初期値として使用。
+ *
+ * ## データの依存関係
+ * 1. カテゴリを選択 → 製品一覧を取得（category_id でフィルタ）
+ * 2. 製品を選択 → 価格履歴を取得（tab === 'prices' のときのみ）
+ */
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -7,28 +34,43 @@ import { fetchProducts, createProduct, fetchProductPrices, addProductPrice } fro
 import { formatCurrency, formatDate } from '../utils/formatters';
 import type { Product } from '../types';
 
+/**
+ * 製品管理ページコンポーネント。
+ * カテゴリ・製品・価格改定履歴を3カラムで管理する。
+ */
 export default function ProductManagement() {
   const qc = useQueryClient();
+  /** 選択中のカテゴリID（製品一覧のフィルタに使用） */
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  /** 選択中の製品（右カラムの詳細表示に使用） */
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  /** 右カラムの表示タブ: 'info'=基本情報, 'prices'=価格改定履歴 */
   const [tab, setTab] = useState<'info' | 'prices'>('info');
 
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories });
+
+  // 選択カテゴリの製品一覧（無効製品も含めて表示: include_inactive=true）
   const { data: products } = useQuery({
     queryKey: ['products', selectedCategoryId],
     queryFn: () => fetchProducts({ category_id: selectedCategoryId ?? undefined, include_inactive: true }),
   });
+
+  // 製品の価格改定履歴（'prices' タブ選択時のみフェッチ）
   const { data: priceHistory } = useQuery({
     queryKey: ['product-prices', selectedProduct?.id],
     queryFn: () => fetchProductPrices(selectedProduct!.id),
-    enabled: !!selectedProduct && tab === 'prices',
+    enabled: !!selectedProduct && tab === 'prices', // 条件付きフェッチ
   });
 
   // カテゴリ追加フォーム
   const catForm = useForm<{ name: string }>({ defaultValues: { name: '' } });
   const catMutation = useMutation({
     mutationFn: createCategory,
-    onSuccess: () => { toast.success('カテゴリを追加しました'); catForm.reset(); qc.invalidateQueries({ queryKey: ['categories'] }); },
+    onSuccess: () => {
+      toast.success('カテゴリを追加しました');
+      catForm.reset();
+      qc.invalidateQueries({ queryKey: ['categories'] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -40,7 +82,11 @@ export default function ProductManagement() {
 
   const prodMutation = useMutation({
     mutationFn: (v: any) => createProduct({ ...v, category_id: selectedCategoryId }),
-    onSuccess: () => { toast.success('製品を追加しました'); prodForm.reset({ unit: '個' }); qc.invalidateQueries({ queryKey: ['products'] }); },
+    onSuccess: () => {
+      toast.success('製品を追加しました');
+      prodForm.reset({ unit: '個' }); // unit だけデフォルト値を維持
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -54,6 +100,7 @@ export default function ProductManagement() {
     onSuccess: () => {
       toast.success('価格改定を記録しました');
       priceForm.reset({ valid_from: new Date().toISOString().substring(0, 10) });
+      // 価格履歴と製品マスタ（default_unit_price等）の両方を更新
       qc.invalidateQueries({ queryKey: ['product-prices', selectedProduct?.id] });
       qc.invalidateQueries({ queryKey: ['products'] });
     },
@@ -65,7 +112,7 @@ export default function ProductManagement() {
       <h1 className="text-xl font-bold text-gray-800">製品管理</h1>
 
       <div className="grid grid-cols-3 gap-4">
-        {/* カテゴリ一覧 */}
+        {/* 左カラム: カテゴリ一覧 */}
         <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
           <h2 className="text-sm font-semibold text-gray-700">カテゴリ</h2>
           <ul className="space-y-1">
@@ -82,6 +129,7 @@ export default function ProductManagement() {
               </li>
             ))}
           </ul>
+          {/* カテゴリ追加フォーム（インライン） */}
           <form onSubmit={catForm.handleSubmit((v) => catMutation.mutate(v))} className="flex gap-2 pt-2 border-t">
             <input {...catForm.register('name', { required: true })} placeholder="新規カテゴリ名"
               className="flex-1 border rounded px-2 py-1 text-xs" />
@@ -89,7 +137,7 @@ export default function ProductManagement() {
           </form>
         </div>
 
-        {/* 製品一覧 */}
+        {/* 中カラム: 製品一覧 */}
         <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
           <h2 className="text-sm font-semibold text-gray-700">製品</h2>
           {!selectedCategoryId ? (
@@ -103,7 +151,7 @@ export default function ProductManagement() {
                       onClick={() => { setSelectedProduct(p); setTab('info'); }}
                       className={`w-full text-left px-3 py-2 rounded text-sm ${
                         selectedProduct?.id === p.id ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50'
-                      } ${!p.is_active ? 'opacity-40' : ''}`}
+                      } ${!p.is_active ? 'opacity-40' : ''}`} // 無効製品は半透明
                     >
                       <div>{p.name}</div>
                       {p.code && <div className="text-xs text-gray-400">{p.code}</div>}
@@ -111,6 +159,7 @@ export default function ProductManagement() {
                   </li>
                 ))}
               </ul>
+              {/* 製品追加フォーム */}
               <form onSubmit={prodForm.handleSubmit((v) => prodMutation.mutate(v))} className="space-y-2 pt-2 border-t">
                 <input {...prodForm.register('name', { required: true })} placeholder="製品名 *"
                   className="w-full border rounded px-2 py-1 text-xs" />
@@ -132,12 +181,13 @@ export default function ProductManagement() {
           )}
         </div>
 
-        {/* 製品詳細 */}
+        {/* 右カラム: 製品詳細（基本情報 / 価格改定履歴タブ） */}
         <div className="bg-white rounded-lg shadow-sm p-4">
           {!selectedProduct ? (
             <p className="text-xs text-gray-400">製品を選択してください</p>
           ) : (
             <>
+              {/* タブ切り替え */}
               <div className="flex gap-2 border-b mb-3">
                 {(['info', 'prices'] as const).map((t) => (
                   <button key={t} onClick={() => setTab(t)}
@@ -147,6 +197,7 @@ export default function ProductManagement() {
                 ))}
               </div>
 
+              {/* 基本情報タブ */}
               {tab === 'info' && (
                 <div className="space-y-2 text-sm">
                   <div><span className="text-gray-500">製品名:</span> <strong>{selectedProduct.name}</strong></div>
@@ -154,6 +205,7 @@ export default function ProductManagement() {
                   <div><span className="text-gray-500">単位:</span> {selectedProduct.unit}</div>
                   <div><span className="text-gray-500">標準販売単価:</span> {formatCurrency(selectedProduct.default_unit_price)}</div>
                   <div><span className="text-gray-500">標準原価:</span> {formatCurrency(selectedProduct.default_cost_price)}</div>
+                  {/* 標準利益率: 両方の価格がある場合のみ表示 */}
                   {selectedProduct.default_unit_price && selectedProduct.default_cost_price && (
                     <div className="bg-gray-50 rounded p-2 text-xs">
                       標準利益率: {(((selectedProduct.default_unit_price - selectedProduct.default_cost_price) / selectedProduct.default_unit_price) * 100).toFixed(1)}%
@@ -162,8 +214,10 @@ export default function ProductManagement() {
                 </div>
               )}
 
+              {/* 価格改定履歴タブ */}
               {tab === 'prices' && (
                 <div className="space-y-3">
+                  {/* 価格改定記録フォーム */}
                   <form onSubmit={priceForm.handleSubmit((v) => priceMutation.mutate(v))} className="space-y-2 border rounded p-3">
                     <p className="text-xs font-medium text-gray-700">価格改定を記録</p>
                     <input type="date" {...priceForm.register('valid_from', { required: true })}
@@ -179,6 +233,7 @@ export default function ProductManagement() {
                     <button type="submit" className="w-full bg-blue-600 text-white py-1 rounded text-xs">記録</button>
                   </form>
 
+                  {/* 価格改定履歴一覧（新しい順で表示） */}
                   <ul className="space-y-2">
                     {priceHistory?.map((h) => (
                       <li key={h.id} className="text-xs border rounded p-2 space-y-1">

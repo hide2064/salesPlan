@@ -1,9 +1,34 @@
+/**
+ * @file Sidebar.tsx
+ * @description 左サイドバーナビゲーションコンポーネント
+ *
+ * ## 表示制御
+ * ナビゲーション項目はロールに応じてフィルタリングする:
+ * - always: 全ロールに表示
+ * - writeOnly: manager以上のみ表示（viewer は非表示）
+ * - adminOnly: admin のみ表示
+ *
+ * ## アクティブ状態
+ * NavLink の isActive コールバックで現在のパスに対応するリンクをハイライト。
+ * アクティブ時は `bg-blue-600 text-white`、非アクティブは `text-gray-300 hover:bg-gray-700`。
+ */
+
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
+/**
+ * アプリ左側の固定サイドバー。
+ * ナビゲーションリンク一覧・現在のユーザー情報・ログアウトボタンを表示する。
+ */
 export default function Sidebar() {
   const { user, logout, can } = useAuth();
 
+  /**
+   * ナビゲーション項目の定義。
+   * always=true: 全ロール表示
+   * writeOnly=true: write権限が必要（viewer は非表示）
+   * adminOnly=true: admin のみ表示
+   */
   const nav = [
     { to: '/dashboard',   label: 'ダッシュボード', always: true },
     { to: '/sales/entry', label: '売上入力',       writeOnly: true },
@@ -19,14 +44,17 @@ export default function Sidebar() {
     return true;
   });
 
+  /** ロールコードを日本語ラベルに変換するマップ */
   const roleLabel: Record<string, string> = { admin: '管理者', manager: '担当者', viewer: '閲覧者' };
 
   return (
     <aside className="w-48 bg-gray-900 text-white flex flex-col">
+      {/* アプリタイトル */}
       <div className="p-4 text-center font-bold border-b border-gray-700 text-sm leading-tight">
         売上管理<br />システム
       </div>
 
+      {/* ナビゲーションリンク一覧 */}
       <nav className="flex-1 py-2">
         {nav.map((item) => (
           <NavLink
@@ -45,7 +73,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* ユーザー情報 */}
+      {/* ユーザー情報・ログアウトボタン（下部固定） */}
       {user && (
         <div className="p-3 border-t border-gray-700 text-xs">
           <div className="text-gray-300 truncate">{user.display_name}</div>

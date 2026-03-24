@@ -1,3 +1,24 @@
+/**
+ * @file SalesList.tsx
+ * @description 売上一覧ページ
+ *
+ * ## 機能
+ * - 売上一覧の絞り込み表示（年月・カテゴリ・製品・顧客名）
+ * - ページネーション（1ページ50件）
+ * - CSV出力（現在のフィルタ結果をエクスポート）
+ * - 売上の削除（確認ダイアログ付き）
+ *
+ * ## フィルタの状態管理
+ * フィルタ変更時は setPage(1) でページを先頭に戻す。
+ * queryKey に全フィルタ値を含めることで、
+ * 変更があれば自動的に再フェッチが走る。
+ *
+ * ## CSV出力の仕様
+ * サーバーへの追加リクエストなし。
+ * 現在のページデータ（data.data）をそのまま exportCsv() に渡す。
+ * ページをまたいだ全件出力には /api/export/sales を使用する。
+ */
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -7,18 +28,26 @@ import { fetchProducts } from '../api/products';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatCurrency, formatPercent, formatDate, currentYearMonth, exportCsv } from '../utils/formatters';
 
+/**
+ * 売上一覧ページコンポーネント。
+ * 全ロールがアクセス可能（閲覧のみ）。削除は write 権限が必要だが、
+ * ここではロール確認なし（APIサーバー側で弾く）。
+ */
 export default function SalesList() {
+  // フィルタ状態
   const [yearMonth, setYearMonth] = useState(currentYearMonth());
   const [categoryId, setCategoryId] = useState('');
   const [productId, setProductId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [page, setPage] = useState(1);
-  const limit = 50;
+  const limit = 50; // 1ページあたり件数（固定）
 
   const qc = useQueryClient();
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories });
+  // 製品フィルタ: カテゴリを問わず全製品を取得（絞り込みのため）
   const { data: products } = useQuery({ queryKey: ['products'], queryFn: () => fetchProducts() });
 
+  // 売上一覧取得（フィルタ・ページ変更で自動再フェッチ）
   const { data, isLoading } = useQuery({
     queryKey: ['sales', { yearMonth, categoryId, productId, customerName, page }],
     queryFn: () => fetchSales({
@@ -37,11 +66,16 @@ export default function SalesList() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  /** 削除確認ダイアログを表示してから削除を実行する */
   const handleDelete = (id: number) => {
     if (!confirm('削除しますか？')) return;
     deleteMutation.mutate(id);
   };
 
+  /**
+   * 現在のページデータをCSVとしてダウンロードする。
+   * ページング対応の全件エクスポートは別途 /api/export/sales を使用。
+   */
   const handleExport = () => {
     if (!data) return;
     exportCsv(
@@ -66,7 +100,7 @@ export default function SalesList() {
         </button>
       </div>
 
-      {/* フィルタ */}
+      {/* 絞り込みフィルタ: 変更でページが1にリセットされる */}
       <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">年月</label>
@@ -98,6 +132,7 @@ export default function SalesList() {
 
       {isLoading ? <LoadingSpinner /> : (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          {/* 件数・ページ情報 */}
           <div className="px-4 py-2 text-xs text-gray-500 border-b">
             全 {data?.total ?? 0} 件 (ページ {page}/{totalPages})
           </div>
@@ -132,6 +167,7 @@ export default function SalesList() {
                     <td className="p-2 text-right">{formatCurrency(s.unit_price)}</td>
                     <td className="p-2 text-right">{s.cost_price != null ? formatCurrency(s.cost_price) : '-'}</td>
                     <td className="p-2 text-right font-medium">{formatCurrency(s.amount)}</td>
+                    {/* 利益: 黒字=緑、赤字=赤で色分け */}
                     <td className={`p-2 text-right ${s.profit_amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(s.profit_amount)}
                     </td>
@@ -146,7 +182,7 @@ export default function SalesList() {
             </table>
           </div>
 
-          {/* ページネーション */}
+          {/* ページネーション: 2ページ以上の場合のみ表示 */}
           {totalPages > 1 && (
             <div className="flex justify-center gap-2 p-3 border-t">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}

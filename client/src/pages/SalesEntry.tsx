@@ -1,3 +1,26 @@
+/**
+ * @file SalesEntry.tsx
+ * @description 売上入力ページ
+ *
+ * ## 機能
+ * - 売上の新規登録フォーム（react-hook-form + zod バリデーション）
+ * - カテゴリ選択 → 製品一覧の動的絞り込み
+ * - 製品選択 → デフォルト単価の自動セット
+ * - 数量・単価 → 売上金額・原価合計の自動計算
+ * - 利益額・利益率のリアルタイムプレビュー
+ * - 当月直近10件の表示（登録後に自動更新）
+ *
+ * ## 自動計算ロジック
+ * - amount = quantity * unit_price
+ * - cost_amount = quantity * cost_price
+ * - profit_amount = amount - cost_amount（クライアント側でプレビュー計算）
+ * - 実際のDBへの profit 保存はサーバー側（保存しない）
+ *
+ * ## キャッシュ無効化
+ * 登録成功後に ['sales'] と ['monthly-summary'] のキャッシュを無効化し、
+ * 他の画面（ダッシュボード等）のデータを自動更新する。
+ */
+
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +33,10 @@ import { createSale, fetchSales } from '../api/sales';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatCurrency, formatPercent, formatDate, currentYearMonth } from '../utils/formatters';
 
+/**
+ * フォームのバリデーションスキーマ（zod）。
+ * coerce.number() で input の文字列値を数値に強制変換する。
+ */
 const schema = z.object({
   sale_date: z.string().min(1, '日付は必須'),
   category_id: z.coerce.number().min(1, 'カテゴリは必須'),
@@ -24,6 +51,10 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+/**
+ * 売上入力ページコンポーネント。
+ * manager以上のロールのみアクセス可能（App.tsx の writeOnly 設定で制御）。
+ */
 export default function SalesEntry() {
   const qc = useQueryClient();
   const today = new Date().toISOString().substring(0, 10);
@@ -33,15 +64,22 @@ export default function SalesEntry() {
     defaultValues: { sale_date: today, quantity: 1, unit_price: 0, amount: 0 },
   });
 
+  // カテゴリ一覧（アクティブのみ）
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories });
+
+  // カテゴリ選択が変わったら対応する製品一覧を再取得
   const categoryId = watch('category_id');
   const { data: products } = useQuery({
     queryKey: ['products', categoryId],
     queryFn: () => fetchProducts({ category_id: categoryId }),
-    enabled: !!categoryId,
+    enabled: !!categoryId, // カテゴリ未選択時はフェッチしない
   });
 
-  // 製品選択時にデフォルト価格をセット
+  /**
+   * 製品選択時のデフォルト価格自動セット。
+   * 製品マスタの default_unit_price / default_cost_price をフォームにセットする。
+   * ユーザーが手動で変更した場合は上書きしないよう、製品変更時のみ実行する。
+   */
   const productId = watch('product_id');
   useEffect(() => {
     if (!productId || !products) return;
@@ -51,7 +89,10 @@ export default function SalesEntry() {
     if (p.default_cost_price) setValue('cost_price', p.default_cost_price);
   }, [productId, products, setValue]);
 
-  // 数量・単価が変わったら金額を自動計算
+  /**
+   * 数量・単価変更時の金額自動計算。
+   * Math.round(...* 100) / 100 で小数点2桁に丸める（浮動小数点誤差対策）。
+   */
   const quantity = watch('quantity');
   const unitPrice = watch('unit_price');
   const costPrice = watch('cost_price');
@@ -60,11 +101,13 @@ export default function SalesEntry() {
     if (quantity >= 0 && (costPrice ?? 0) >= 0) setValue('cost_amount', Math.round(quantity * (costPrice ?? 0) * 100) / 100);
   }, [quantity, unitPrice, costPrice, setValue]);
 
+  // 利益プレビュー（フォーム入力値からリアルタイム計算、DBには保存しない）
   const amount = watch('amount');
   const costAmount = watch('cost_amount') ?? 0;
   const profitAmount = (amount ?? 0) - costAmount;
   const profitRate = amount > 0 ? (profitAmount / amount) * 100 : null;
 
+  // 当月直近10件の売上一覧（登録確認用）
   const { data: recentSales } = useQuery({
     queryKey: ['sales', { year_month: currentYearMonth(), limit: 10 }],
     queryFn: () => fetchSales({ year_month: currentYearMonth(), limit: 10 }),
@@ -74,7 +117,9 @@ export default function SalesEntry() {
     mutationFn: createSale,
     onSuccess: () => {
       toast.success('売上を登録しました');
+      // フォームをリセット（日付は今日、数量は1に戻す）
       reset({ sale_date: today, quantity: 1, unit_price: 0, amount: 0 });
+      // 売上一覧・月次サマリのキャッシュを無効化して他の画面を更新
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['monthly-summary'] });
     },
@@ -151,7 +196,7 @@ export default function SalesEntry() {
           </div>
         </div>
 
-        {/* 利益プレビュー */}
+        {/* 利益プレビュー: 登録前に利益額・利益率を確認できる（DBには保存しない計算値） */}
         <div className="bg-gray-50 rounded p-3 flex gap-6 text-sm">
           <span>利益額: <strong className={profitAmount >= 0 ? 'text-green-600' : 'text-red-600'}>{formatCurrency(profitAmount)}</strong></span>
           <span>利益率: <strong className={profitAmount >= 0 ? 'text-green-600' : 'text-red-600'}>{formatPercent(profitRate)}</strong></span>
@@ -166,7 +211,7 @@ export default function SalesEntry() {
         </button>
       </form>
 
-      {/* 直近入力一覧 */}
+      {/* 直近入力一覧: 登録直後の確認・誤入力の把握に使用 */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">当月 直近10件</h2>
         <div className="overflow-x-auto">
@@ -185,6 +230,7 @@ export default function SalesEntry() {
               {recentSales?.data.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-gray-50">
                   <td className="p-2">{formatDate(s.sale_date)}</td>
+                  {/* 製品名がない場合はカテゴリ名で代替表示 */}
                   <td className="p-2">{s.product_name ?? s.category_name}</td>
                   <td className="p-2">{s.customer_name ?? '-'}</td>
                   <td className="p-2 text-right">{formatCurrency(s.amount)}</td>
