@@ -27,15 +27,17 @@ if errorlevel 1 (
 echo 起動モードを選択してください:
 echo   1. 開発モード  (ホットリロード対応 / http://localhost:5173)
 echo   2. 本番モード  (ビルド済み / http://localhost:80)
-echo   3. 停止        (全コンテナを停止)
-echo   4. 終了
+echo   3. デバッグモード (VS Code デバッガ + Adminer DB確認 / http://localhost:5173)
+echo   4. 停止        (全コンテナを停止)
+echo   5. 終了
 echo.
-set /p MODE="番号を入力してください [1-4]: "
+set /p MODE="番号を入力してください [1-5]: "
 
 if "%MODE%"=="1" goto DEV
 if "%MODE%"=="2" goto PROD
-if "%MODE%"=="3" goto STOP
-if "%MODE%"=="4" goto END
+if "%MODE%"=="3" goto DEBUG
+if "%MODE%"=="4" goto STOP
+if "%MODE%"=="5" goto END
 
 echo [ERROR] 無効な選択です。
 pause
@@ -106,10 +108,65 @@ set URL=http://localhost
 goto OPEN_BROWSER_PROD
 
 :: ─────────────────────────────────────
+:DEBUG
+echo.
+echo [INFO] デバッグモードで起動します...
+echo [INFO] VS Code デバッガポート 9229 と Adminer (DB確認) が有効になります。
+docker compose -f docker-compose.debug.yml up --build -d
+if errorlevel 1 (
+    echo [ERROR] 起動に失敗しました。ログを確認してください。
+    pause
+    exit /b 1
+)
+
+echo.
+echo [INFO] 起動完了！
+echo ─────────────────────────────────────
+echo  フロントエンド : http://localhost:5173
+echo  APIサーバー    : http://localhost:3001
+echo  Adminer(DB確認): http://localhost:8080
+echo  デバッガポート : localhost:9229
+echo  初期ログイン   : admin / Admin1234!
+echo ─────────────────────────────────────
+echo.
+echo [Adminer 接続情報]
+echo   サーバー      : mysql
+echo   ユーザー名    : salesuser
+echo   パスワード    : salespass (または .env の DB_PASSWORD)
+echo   データベース  : sales_plan
+echo.
+echo [VS Code デバッグ手順]
+echo   1. VS Code で「実行とデバッグ」パネルを開く (Ctrl+Shift+D)
+echo   2. 「Attach to Server (Docker Debug)」を選択して ▶ 実行
+echo   3. ソースコード上にブレークポイントを設定してリクエストを送る
+echo.
+echo [ヒント] ログファイルの場所: server\logs\
+echo   app.log   ... INFO以上の全ログ
+echo   error.log ... エラーのみ
+echo.
+
+set /p SEED="サンプルデータを投入しますか？ [y/N]: "
+if /i "%SEED%"=="y" (
+    echo [INFO] サンプルデータを投入中...（MySQLの起動を待っています）
+    timeout /t 10 /nobreak > nul
+    docker exec sales_server_debug npx tsx src/seed.ts
+    if errorlevel 1 (
+        echo [WARN] サンプルデータの投入に失敗しました。少し待ってから手動で実行してください:
+        echo        docker exec sales_server_debug npx tsx src/seed.ts
+    ) else (
+        echo [INFO] サンプルデータの投入が完了しました。
+    )
+)
+
+set URL=http://localhost:5173
+goto OPEN_BROWSER_PROD
+
+:: ─────────────────────────────────────
 :STOP
 echo.
 echo [INFO] コンテナを停止します...
 docker compose -f docker-compose.dev.yml down 2> nul
+docker compose -f docker-compose.debug.yml down 2> nul
 docker compose down 2> nul
 echo [INFO] 停止しました。
 pause
@@ -129,7 +186,7 @@ if /i "%OPEN%"=="y" (
 echo.
 echo [INFO] 終了するにはこのウィンドウを閉じてください。
 echo        コンテナはバックグラウンドで動作を続けます。
-echo        停止するには start.bat の「3. 停止」を選択してください。
+echo        停止するには start.bat の「4. 停止」を選択してください。
 pause
 exit /b 0
 

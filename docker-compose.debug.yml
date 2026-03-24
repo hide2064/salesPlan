@@ -1,0 +1,134 @@
+# ─────────────────────────────────────────────────────────────
+# docker-compose.debug.yml
+# デバッグ専用 Docker Compose 設定
+#
+# 開発モード (docker-compose.dev.yml) との主な違い:
+#   ① server に Node.js デバッガポート (9229) を公開
+#      → VS Code / Chrome DevTools でブレークポイントデバッグが可能
+#   ② Adminer コンテナを追加 (ポート 8080)
+#      → ブラウザで DB の中身を直接確認・編集できる GUI ツール
+#   ③ ログディレクトリ (./server/logs) をホストにマウント
+#      → コンテナ外からリアルタイムにログファイルを参照できる
+#
+# 起動方法:
+#   docker compose -f docker-compose.debug.yml up --build -d
+#
+# アクセス先:
+#   フロントエンド : http://localhost:5173
+#   API サーバー   : http://localhost:3001
+#   Adminer (DB)   : http://localhost:8080
+#   デバッガ       : localhost:9229  (VS Code で "Attach" 設定)
+# ─────────────────────────────────────────────────────────────
+version: '3.8'
+
+services:
+
+  # ──────────────────────────────────────────────
+  # MySQL 8.0 データベース
+  # ──────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: sales_mysql_debug
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${DB_NAME:-sales_plan}
+      MYSQL_USER: ${DB_USER:-salesuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-salespass}
+    ports:
+      # 3306 をホストに公開 → Adminer / 外部ツールから直接接続可
+      - "3306:3306"
+    volumes:
+      # 開発モードと同じデータボリュームを共有 (データを消さずにデバッグ可)
+      - mysql_data_debug:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone='+09:00'
+      --general-log=1
+      --general-log-file=/var/lib/mysql/general.log
+    # general-log=1 : 全SQLをファイルに記録 (デバッグ時のみ有効化)
+    # 本番・開発モードでは OFF にすること（ディスク容量・パフォーマンス影響）
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ──────────────────────────────────────────────
+  # Node.js API サーバー (デバッグモード)
+  # ──────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: sales_server_debug
+    volumes:
+      - ./server/src:/app/src
+      # ログファイルをホストの ./server/logs/ にマウント
+      # → VS Code / テキストエディタでリアルタイム確認可
+      - ./server/logs:/app/logs
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-salesuser}
+      DB_PASSWORD: ${DB_PASSWORD:-salespass}
+      DB_NAME: ${DB_NAME:-sales_plan}
+      PORT: 3001
+      NODE_ENV: development
+      LOG_LEVEL: debug        # 最も詳細なログレベル
+      LOG_DIR: /app/logs      # ログ出力先 (マウント先に合わせる)
+      # Node.js デバッガを有効化
+      # --inspect=0.0.0.0:9229 : コンテナ外からアタッチ可能
+      # tsx watch との組み合わせで tsx が NODE_OPTIONS を引き継ぐ
+      NODE_OPTIONS: "--inspect=0.0.0.0:9229"
+    ports:
+      - "3001:3001"   # API ポート
+      - "9229:9229"   # Node.js デバッガポート (VS Code からアタッチ)
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────
+  # Vite 開発サーバー (フロントエンド)
+  # ──────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: sales_client_debug
+    volumes:
+      - ./client/src:/app/src
+      - ./client/index.html:/app/index.html
+    environment:
+      VITE_API_BASE_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+
+  # ──────────────────────────────────────────────
+  # Adminer: ブラウザベースの DB 管理ツール
+  # ──────────────────────────────────────────────
+  # 接続方法 (http://localhost:8080 にアクセス):
+  #   サーバー  : mysql
+  #   ユーザー  : salesuser  (または root)
+  #   パスワード: salespass  (または .env の値)
+  #   データベース: sales_plan
+  adminer:
+    image: adminer:latest
+    container_name: sales_adminer
+    ports:
+      - "8080:8080"
+    environment:
+      # デフォルトサーバーを MySQL コンテナに設定 (ログイン画面で入力不要)
+      ADMINER_DEFAULT_SERVER: mysql
+      # カラーテーマ: pepa-linha (シンプルで見やすい)
+      ADMINER_DESIGN: pepa-linha
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql_data_debug:
