@@ -380,6 +380,16 @@ export default function SalePlanList() {
                         {plan.status === 'pending' && (
                           <div className="flex gap-2 items-center">
                             <button
+                              onClick={() => {
+                                if (confirm(`「${plan.customer_name ?? plan.category_name}」を売上実績として確定しますか？`))
+                                  convertMutation.mutate(plan.id);
+                              }}
+                              disabled={convertMutation.isPending}
+                              className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 disabled:opacity-50"
+                            >
+                              売上確定
+                            </button>
+                            <button
                               onClick={() => setEditingPlan(plan)}
                               className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200"
                             >
