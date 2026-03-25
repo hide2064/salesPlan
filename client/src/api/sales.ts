@@ -12,7 +12,7 @@
  */
 
 import api from './client';
-import type { Sale, SaleListResponse, DepartmentSummary } from '../types';
+import type { Sale, SaleListResponse, DepartmentSummary, SalesDeptProductRow } from '../types';
 
 /**
  * 売上一覧フィルタ条件
@@ -87,3 +87,19 @@ export const deleteSale = (id: number) =>
  */
 export const fetchSalesByDepartment = (params: { year_month?: string; from?: string; to?: string }) =>
   api.get<DepartmentSummary[]>('/sales/by-department', { params }).then((r) => r.data);
+
+/** 部署×課×製品×単価の集計一覧（部署タブ用）*/
+export const fetchSalesDeptProductSummary = (params: {
+  year_month?: string;
+  department?: string;
+  section?: string;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}) =>
+  api
+    .get<{ data: SalesDeptProductRow[]; total: number; page: number; limit: number }>(
+      '/sales/dept-product-summary', { params }
+    )
+    .then((r) => r.data);

@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { fetchSales, deleteSale } from '../api/sales';
+import { fetchSales, deleteSale, fetchSalesDeptProductSummary } from '../api/sales';
 import { fetchCategories } from '../api/categories';
 import { fetchProducts } from '../api/products';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -59,12 +59,13 @@ export default function SalesList() {
   const [dateSortBy, setDateSortBy]   = useState('sale_date');
   const [dateSortDir, setDateSortDir] = useState<SortDir>('desc');
 
-  // 部署ベースのフィルタ・ソート状態（初期: 部署→課 昇順）
+  // 部署ベースのフィルタ・ソート状態（初期: 部署→課→製品→単価 昇順）
   const [deptPage, setDeptPage] = useState(1);
   const [deptFilterDept, setDeptFilterDept]       = useState('');
   const [deptFilterSection, setDeptFilterSection] = useState('');
   const [deptSortBy, setDeptSortBy]   = useState('department');
   const [deptSortDir, setDeptSortDir] = useState<SortDir>('asc');
+  const DEPT_LIMIT = 100;
 
   const limit = 50;
   const qc = useQueryClient();
@@ -91,18 +92,18 @@ export default function SalesList() {
     enabled: activeTab === 'date',
   });
 
-  // 部署ベース: 部署・課フィルタ付き売上明細
+  // 部署ベース: 部署×課×製品×単価 集計ビュー
   const { data: deptData, isLoading: deptLoading } = useQuery({
-    queryKey: ['sales-dept-detail', { yearMonth, deptFilterDept, deptFilterSection,
-                                      deptSortBy, deptSortDir, deptPage }],
-    queryFn: () => fetchSales({
-      year_month: yearMonth || undefined,
-      department: deptFilterDept    || undefined,
-      section:    deptFilterSection || undefined,
-      sort_by:    deptSortBy,
-      sort_order: deptSortDir,
-      page:       deptPage,
-      limit,
+    queryKey: ['sales-dept-product', { yearMonth, deptFilterDept, deptFilterSection,
+                                       deptSortBy, deptSortDir, deptPage }],
+    queryFn: () => fetchSalesDeptProductSummary({
+      year_month:  yearMonth || undefined,
+      department:  deptFilterDept    || undefined,
+      section:     deptFilterSection || undefined,
+      sort_by:     deptSortBy,
+      sort_order:  deptSortDir,
+      page:        deptPage,
+      limit:       DEPT_LIMIT,
     }),
     enabled: activeTab === 'department',
   });
@@ -147,17 +148,17 @@ export default function SalesList() {
   const handleDeptExport = () => {
     if (!deptData) return;
     exportCsv(
-      ['部署', '課', '製品名', '売上原価', '売上数', '売上高'],
-      deptData.data.map((s) => [
-        s.department ?? '', s.section ?? '', s.product_name ?? '',
-        s.cost_amount ?? '', s.quantity, s.amount,
+      ['部署', '課', '製品', '単価', '件数', '売上数', '売上高'],
+      deptData.data.map((r) => [
+        r.department, r.section, r.product_name,
+        r.unit_price, r.sales_count, r.total_quantity, r.total_amount,
       ]),
       `sales_by_dept_${yearMonth || 'all'}.csv`
     );
   };
 
-  const totalPages     = data     ? Math.ceil(data.total     / limit) : 0;
-  const deptTotalPages = deptData ? Math.ceil(deptData.total / limit) : 0;
+  const totalPages     = data     ? Math.ceil(data.total     / limit)       : 0;
+  const deptTotalPages = deptData ? Math.ceil(deptData.total / DEPT_LIMIT)  : 0;
 
   return (
     <div className="space-y-4">
@@ -346,42 +347,38 @@ export default function SalesList() {
           {deptLoading ? <LoadingSpinner /> : (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
               <div className="px-4 py-2 text-xs text-gray-500 border-b">
-                全 {deptData?.total ?? 0} 件 (ページ {deptPage}/{deptTotalPages})
+                全 {deptData?.total ?? 0} 件 (ページ {deptPage}/{deptTotalPages || 1})
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-600 text-xs">
-                      <SortHeader col="department"   label="部署"     sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
-                      <SortHeader col="section"      label="課"       sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
-                      <SortHeader col="product_name" label="製品名"   sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
-                      <SortHeader col="cost_amount"  label="売上原価" align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
-                      <SortHeader col="quantity"     label="売上数"   align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
-                      <SortHeader col="amount"       label="売上高"   align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="department"     label="部署"   sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="section"        label="課"     sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="product_name"   label="製品"   sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="unit_price"     label="単価"   align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="sales_count"    label="件数"   align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="total_quantity" label="売上数" align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
+                      <SortHeader col="total_amount"   label="売上高" align="right" sortBy={deptSortBy} sortDir={deptSortDir} onSort={handleDeptSort} />
                     </tr>
                   </thead>
                   <tbody>
                     {deptData?.data.length === 0 && (
-                      <tr><td colSpan={6} className="text-center py-8 text-gray-400">データがありません</td></tr>
+                      <tr><td colSpan={7} className="text-center py-8 text-gray-400">データがありません</td></tr>
                     )}
-                    {deptData?.data.map((s) => (
-                      <tr key={s.id} className="border-t hover:bg-gray-50">
+                    {deptData?.data.map((r, i) => (
+                      <tr key={i} className="border-t hover:bg-gray-50">
                         <td className="p-2">
-                          {s.department
-                            ? <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">{s.department}</span>
-                            : <span className="text-gray-300">-</span>}
+                          <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">{r.department}</span>
                         </td>
                         <td className="p-2">
-                          {s.section
-                            ? <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs">{s.section}</span>
-                            : <span className="text-gray-300">-</span>}
+                          <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs">{r.section}</span>
                         </td>
-                        <td className="p-2">{s.product_name ?? '-'}</td>
-                        <td className="p-2 text-right text-gray-500">
-                          {s.cost_amount != null ? formatCurrency(s.cost_amount) : '-'}
-                        </td>
-                        <td className="p-2 text-right">{s.quantity}</td>
-                        <td className="p-2 text-right font-medium">{formatCurrency(s.amount)}</td>
+                        <td className="p-2">{r.product_name}</td>
+                        <td className="p-2 text-right text-gray-600">{formatCurrency(r.unit_price)}</td>
+                        <td className="p-2 text-right">{r.sales_count} 件</td>
+                        <td className="p-2 text-right">{r.total_quantity}</td>
+                        <td className="p-2 text-right font-medium">{formatCurrency(r.total_amount)}</td>
                       </tr>
                     ))}
                   </tbody>

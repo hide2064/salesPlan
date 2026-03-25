@@ -130,6 +130,102 @@ router.get('/', async (req: any, res: any) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// GET /api/sales/dept-product-summary
+// 部署×課×製品×単価 の集計ビュー（部署タブ用）
+// ─────────────────────────────────────────────────────────────
+/**
+ * クエリパラメータ:
+ *   year_month  : 絞り込む年月 (YYYY-MM)
+ *   department  : 部署名の部分一致
+ *   section     : 課名の部分一致
+ *   sort_by     : department | section | product_name | unit_price |
+ *                 sales_count | total_quantity | total_amount  (デフォルト: department)
+ *   sort_order  : asc | desc  (デフォルト: asc)
+ *   page / limit: ページネーション
+ *
+ * レスポンス: { data, total, page, limit }
+ */
+router.get('/dept-product-summary', async (req: any, res: any) => {
+  const {
+    year_month, department, section,
+    sort_by = 'department', sort_order = 'asc',
+    page = '1', limit = '100',
+  } = req.query;
+
+  const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+  const dir    = (sort_order as string).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  // ホワイトリスト — alias 名で指定可（GROUP BY後の列）
+  const sortColMap: Record<string, string> = {
+    department:     'department',
+    section:        'section',
+    product_name:   'product_name',
+    unit_price:     'unit_price',
+    sales_count:    'sales_count',
+    total_quantity: 'total_quantity',
+    total_amount:   'total_amount',
+  };
+  const primaryCol = sortColMap[sort_by as string] ?? 'department';
+
+  // 複合ソート: 指定列を1位キーに、残り3つを固定昇順で続ける
+  const fixedCols = ['department', 'section', 'product_name', 'unit_price']
+    .filter((c) => c !== primaryCol)
+    .map((c) => `${c} ASC`)
+    .join(', ');
+  const orderBy = `${primaryCol} ${dir}${fixedCols ? ', ' + fixedCols : ''}`;
+
+  let where = 'WHERE 1=1';
+  const params: any[] = [];
+  if (year_month)  { where += ' AND s.`year_month` = ?'; params.push(year_month); }
+  if (department)  { where += ' AND s.department LIKE ?'; params.push(`%${department}%`); }
+  if (section)     { where += ' AND s.section LIKE ?';    params.push(`%${section}%`); }
+
+  // 件数取得（サブクエリで GROUP BY 後の行数）
+  const [countRows]: any = await pool.query(
+    `SELECT COUNT(*) AS total FROM (
+       SELECT 1 FROM sales s LEFT JOIN products p ON s.product_id = p.id
+       ${where}
+       GROUP BY s.department, s.section, p.id, p.name, s.unit_price
+     ) sub`,
+    params
+  );
+  const total = countRows[0].total;
+
+  const [rows]: any = await pool.query(
+    `SELECT
+       IFNULL(s.department, '（未設定）')        AS department,
+       IFNULL(s.section,    '（未設定）')        AS section,
+       COALESCE(p.name,     '（製品なし）')      AS product_name,
+       s.unit_price,
+       COUNT(*)                                  AS sales_count,
+       SUM(s.quantity)                           AS total_quantity,
+       SUM(s.amount)                             AS total_amount
+     FROM sales s
+     LEFT JOIN products p ON s.product_id = p.id
+     ${where}
+     GROUP BY s.department, s.section, p.id, p.name, s.unit_price
+     ORDER BY ${orderBy}
+     LIMIT ? OFFSET ?`,
+    [...params, parseInt(limit as string), offset]
+  );
+
+  res.json({
+    data: rows.map((r: any) => ({
+      department:     r.department,
+      section:        r.section,
+      product_name:   r.product_name,
+      unit_price:     parseFloat(r.unit_price)     || 0,
+      sales_count:    parseInt(r.sales_count)      || 0,
+      total_quantity: parseFloat(r.total_quantity) || 0,
+      total_amount:   parseFloat(r.total_amount)   || 0,
+    })),
+    total,
+    page: parseInt(page as string),
+    limit: parseInt(limit as string),
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
 // GET /api/sales/by-department
 // 部署別集計: 指定期間の部署ごとの売上・利益サマリ
 // ─────────────────────────────────────────────────────────────

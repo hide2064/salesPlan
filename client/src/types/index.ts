@@ -111,6 +111,19 @@ export interface Sale {
 }
 
 /**
+ * 部署×課×製品×単価の集計行（/api/sales/dept-product-summary のレスポンス）。
+ */
+export interface SalesDeptProductRow {
+  department: string;
+  section: string;
+  product_name: string;
+  unit_price: number;
+  sales_count: number;
+  total_quantity: number;
+  total_amount: number;
+}
+
+/**
  * 部署別売上集計（/api/sales/by-department のレスポンス）。
  */
 export interface DepartmentSummary {
