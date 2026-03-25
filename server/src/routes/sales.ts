@@ -55,8 +55,34 @@ function toYearMonth(date: string): string {
  *   profit_amount / profit_rate は SQL で計算して付加
  */
 router.get('/', async (req: any, res: any) => {
-  const { year_month, category_id, product_id, customer_name, department, section, page = '1', limit = '50' } = req.query;
+  const { year_month, category_id, product_id, customer_name, department, section,
+          sort_by = 'sale_date', sort_order = 'desc',
+          page = '1', limit = '50' } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  // ソート列のホワイトリスト (SQLインジェクション防止)
+  const sortMap: Record<string, string> = {
+    sale_date:     's.sale_date',
+    category_name: 'c.name',
+    product_name:  'p.name',
+    customer_name: 's.customer_name',
+    department:    's.department',
+    section:       's.section',
+    quantity:      's.quantity',
+    unit_price:    's.unit_price',
+    cost_price:    's.cost_price',
+    cost_amount:   's.cost_amount',
+    amount:        's.amount',
+    profit_amount: '(s.amount - IFNULL(s.cost_amount, 0))',
+    profit_rate:   'CASE WHEN s.amount > 0 THEN (s.amount - IFNULL(s.cost_amount,0))/s.amount ELSE NULL END',
+  };
+  const sortCol = sortMap[sort_by as string] ?? 's.sale_date';
+  const sortDir = (sort_order as string).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  // department/section ソート時は両方を複合ソートキーにする
+  const orderBy =
+    sort_by === 'department' ? `s.department ${sortDir}, s.section ${sortDir}, s.id DESC` :
+    sort_by === 'section'    ? `s.section ${sortDir}, s.department ${sortDir}, s.id DESC` :
+    `${sortCol} ${sortDir}, s.id DESC`;
 
   // メインクエリ: categories・products を JOIN して名前も取得
   // profit_amount = amount - cost_amount (cost_amount が NULL の場合は 0 扱い)
@@ -96,8 +122,7 @@ router.get('/', async (req: any, res: any) => {
   );
   const total = countRows[0].total;
 
-  // ソート・ページネーション: 最新日付順、同日は id 降順
-  sql += ' ORDER BY s.sale_date DESC, s.id DESC LIMIT ? OFFSET ?';
+  sql += ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
   params.push(parseInt(limit), offset);
 
   const [rows] = await pool.query(sql, params);

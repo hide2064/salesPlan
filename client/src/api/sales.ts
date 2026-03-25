@@ -34,6 +34,10 @@ export interface SaleFilters {
   page?: number;
   /** 1ページあたりの件数 */
   limit?: number;
+  /** ソートするカラム名 */
+  sort_by?: string;
+  /** ソート方向 */
+  sort_order?: 'asc' | 'desc';
 }
 
 /**
