@@ -31,7 +31,7 @@ export default function Sidebar() {
    */
   const nav = [
     { to: '/dashboard',   label: 'ダッシュボード', always: true },
-    { to: '/sales/entry', label: '売上入力',       writeOnly: true },
+    { to: '/sale-plans',  label: '売上予定',       writeOnly: true },
     { to: '/sales/list',  label: '売上一覧',       always: true },
     { to: '/products',    label: '製品管理',       always: true },
     { to: '/forecasts',   label: '予定売上管理',   always: true },

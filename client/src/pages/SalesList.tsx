@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { fetchSales, deleteSale, fetchSalesByDepartment } from '../api/sales';
+import { fetchSales, deleteSale } from '../api/sales';
 import { fetchCategories } from '../api/categories';
 import { fetchProducts } from '../api/products';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -33,7 +33,12 @@ export default function SalesList() {
   const [department, setDepartment] = useState('');
   const [section, setSection] = useState('');
   const [page, setPage] = useState(1);
+  const [deptPage, setDeptPage] = useState(1);
   const limit = 50;
+
+  // 部署ベースのフィルタ状態
+  const [deptFilterDept, setDeptFilterDept] = useState('');
+  const [deptFilterSection, setDeptFilterSection] = useState('');
 
   const qc = useQueryClient();
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories });
@@ -55,10 +60,16 @@ export default function SalesList() {
     enabled: activeTab === 'date',
   });
 
-  // 部署ベース: 部署別集計
+  // 部署ベース: 部署・課フィルタ付き売上明細
   const { data: deptData, isLoading: deptLoading } = useQuery({
-    queryKey: ['sales-by-department', yearMonth],
-    queryFn: () => fetchSalesByDepartment({ year_month: yearMonth || undefined }),
+    queryKey: ['sales-dept-detail', { yearMonth, deptFilterDept, deptFilterSection, deptPage }],
+    queryFn: () => fetchSales({
+      year_month:  yearMonth || undefined,
+      department:  deptFilterDept || undefined,
+      section:     deptFilterSection || undefined,
+      page:        deptPage,
+      limit,
+    }),
     enabled: activeTab === 'department',
   });
 
@@ -89,15 +100,20 @@ export default function SalesList() {
   const handleDeptExport = () => {
     if (!deptData) return;
     exportCsv(
-      ['部署', '課', '件数', '売上合計', '原価合計', '利益合計', '利益率'],
-      deptData.map((r) => [r.department, r.section, r.sales_count, r.total_amount, r.total_cost, r.total_profit, `${r.profit_rate}%`]),
+      ['部署', '課', '製品名', '売上原価', '売上数', '売上高'],
+      deptData.data.map((s) => [
+        s.department ?? '', s.section ?? '', s.product_name ?? '',
+        s.cost_amount ?? '', s.quantity, s.amount,
+      ]),
       `sales_by_dept_${yearMonth || 'all'}.csv`
     );
   };
 
-  const totalPages = data ? Math.ceil(data.total / limit) : 0;
+  const totalPages     = data     ? Math.ceil(data.total     / limit) : 0;
+  const deptTotalPages = deptData ? Math.ceil(deptData.total / limit) : 0;
 
   const resetPage = () => setPage(1);
+  const resetDeptPage = () => setDeptPage(1);
 
   return (
     <div className="space-y-4">
@@ -261,79 +277,82 @@ export default function SalesList() {
       {/* ── 部署ベース ─────────────────────────────────────────── */}
       {activeTab === 'department' && (
         <>
-          {/* フィルタ（年月のみ） */}
+          {/* フィルタ */}
           <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">年月</label>
               <input type="month" value={yearMonth}
-                onChange={(e) => setYearMonth(e.target.value)}
+                onChange={(e) => { setYearMonth(e.target.value); resetDeptPage(); }}
                 className="border rounded px-2 py-1 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">部署</label>
+              <input type="text" value={deptFilterDept}
+                onChange={(e) => { setDeptFilterDept(e.target.value); resetDeptPage(); }}
+                className="border rounded px-2 py-1 text-sm" placeholder="部分一致" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">課</label>
+              <input type="text" value={deptFilterSection}
+                onChange={(e) => { setDeptFilterSection(e.target.value); resetDeptPage(); }}
+                className="border rounded px-2 py-1 text-sm" placeholder="部分一致" />
             </div>
           </div>
 
           {deptLoading ? <LoadingSpinner /> : (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
               <div className="px-4 py-2 text-xs text-gray-500 border-b">
-                部署数: {deptData?.length ?? 0}
+                全 {deptData?.total ?? 0} 件 (ページ {deptPage}/{deptTotalPages})
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-600 text-xs">
-                      <th className="text-left p-3">部署</th>
-                      <th className="text-left p-3">課</th>
-                      <th className="text-right p-3">件数</th>
-                      <th className="text-right p-3">売上合計</th>
-                      <th className="text-right p-3">原価合計</th>
-                      <th className="text-right p-3">利益合計</th>
-                      <th className="text-right p-3">利益率</th>
+                      <th className="text-left p-2">部署</th>
+                      <th className="text-left p-2">課</th>
+                      <th className="text-left p-2">製品名</th>
+                      <th className="text-right p-2">売上原価</th>
+                      <th className="text-right p-2">売上数</th>
+                      <th className="text-right p-2">売上高</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {deptData?.length === 0 && (
-                      <tr><td colSpan={7} className="text-center py-8 text-gray-400">データがありません</td></tr>
+                    {deptData?.data.length === 0 && (
+                      <tr><td colSpan={6} className="text-center py-8 text-gray-400">データがありません</td></tr>
                     )}
-                    {deptData?.map((r) => (
-                      <tr key={`${r.department}-${r.section}`} className="border-t hover:bg-gray-50">
-                        <td className="p-3 font-medium">
-                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">{r.department}</span>
+                    {deptData?.data.map((s) => (
+                      <tr key={s.id} className="border-t hover:bg-gray-50">
+                        <td className="p-2">
+                          {s.department
+                            ? <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">{s.department}</span>
+                            : <span className="text-gray-300">-</span>}
                         </td>
-                        <td className="p-3">
-                          <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-xs">{r.section}</span>
+                        <td className="p-2">
+                          {s.section
+                            ? <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs">{s.section}</span>
+                            : <span className="text-gray-300">-</span>}
                         </td>
-                        <td className="p-3 text-right text-gray-600">{r.sales_count} 件</td>
-                        <td className="p-3 text-right font-medium">{formatCurrency(r.total_amount)}</td>
-                        <td className="p-3 text-right text-gray-500">{formatCurrency(r.total_cost)}</td>
-                        <td className={`p-3 text-right font-medium ${r.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(r.total_profit)}
+                        <td className="p-2">{s.product_name ?? '-'}</td>
+                        <td className="p-2 text-right text-gray-500">
+                          {s.cost_amount != null ? formatCurrency(s.cost_amount) : '-'}
                         </td>
-                        <td className="p-3 text-right">{formatPercent(r.profit_rate)}</td>
+                        <td className="p-2 text-right">{s.quantity}</td>
+                        <td className="p-2 text-right font-medium">{formatCurrency(s.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
-                  {deptData && deptData.length > 0 && (() => {
-                    const totAmount  = deptData.reduce((s, r) => s + r.total_amount,  0);
-                    const totCost    = deptData.reduce((s, r) => s + r.total_cost,    0);
-                    const totProfit  = deptData.reduce((s, r) => s + r.total_profit,  0);
-                    const totRate    = totAmount > 0 ? (totProfit / totAmount) * 100 : 0;
-                    const totCount   = deptData.reduce((s, r) => s + r.sales_count,   0);
-                    return (
-                      <tfoot>
-                        <tr className="bg-gray-100 font-semibold text-sm border-t-2 border-gray-300">
-                          <td className="p-3" colSpan={2}>合計</td>
-                          <td className="p-3 text-right">{totCount} 件</td>
-                          <td className="p-3 text-right">{formatCurrency(totAmount)}</td>
-                          <td className="p-3 text-right">{formatCurrency(totCost)}</td>
-                          <td className={`p-3 text-right ${totProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(totProfit)}
-                          </td>
-                          <td className="p-3 text-right">{formatPercent(totRate)}</td>
-                        </tr>
-                      </tfoot>
-                    );
-                  })()}
                 </table>
               </div>
+
+              {deptTotalPages > 1 && (
+                <div className="flex justify-center gap-2 p-3 border-t">
+                  <button onClick={() => setDeptPage(p => Math.max(1, p - 1))} disabled={deptPage === 1}
+                    className="px-3 py-1 border rounded text-sm disabled:opacity-40">前へ</button>
+                  <span className="px-3 py-1 text-sm">{deptPage} / {deptTotalPages}</span>
+                  <button onClick={() => setDeptPage(p => Math.min(deptTotalPages, p + 1))} disabled={deptPage === deptTotalPages}
+                    className="px-3 py-1 border rounded text-sm disabled:opacity-40">次へ</button>
+                </div>
+              )}
             </div>
           )}
         </>

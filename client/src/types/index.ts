@@ -166,6 +166,47 @@ export interface Forecast {
 }
 
 /**
+ * 売上予定案件レコード。
+ * 案件レベルの売上予定（製品・日付・金額単位）を管理する。
+ * status が 'converted' になると売上実績に転換済みで編集・削除不可。
+ */
+export interface SalePlan {
+  id: number;
+  /** 予定日 (YYYY-MM-DD) */
+  plan_date: string;
+  year: number;
+  month: number;
+  year_month: string;
+  category_id: number;
+  category_name: string;
+  product_id: number | null;
+  product_name: string | null;
+  quantity: number;
+  unit_price: number;
+  cost_price: number | null;
+  amount: number;
+  cost_amount: number | null;
+  customer_name: string | null;
+  department: string | null;
+  section: string | null;
+  description: string | null;
+  /** 'pending': 予定中, 'converted': 売上登録済み */
+  status: 'pending' | 'converted';
+  /** 転換後の sales.id */
+  sales_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 売上予定一覧APIのレスポンス型 */
+export interface SalePlanListResponse {
+  data: SalePlan[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
  * 月次サマリ（ダッシュボード・推移グラフ用）。
  * 1行 = 1ヶ月分の集計。
  */

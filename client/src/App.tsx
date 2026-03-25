@@ -35,6 +35,7 @@ import Comparison from './pages/Comparison';
 import ProfitAnalysis from './pages/ProfitAnalysis';
 import UserManagement from './pages/UserManagement';
 import CsvImport from './pages/CsvImport';
+import SalePlanList from './pages/SalePlanList';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
 /**
@@ -84,6 +85,7 @@ function AppRoutes() {
         <Route path="comparison" element={<Comparison />} />
         <Route path="profit" element={<ProfitAnalysis />} />
         {/* ユーザー管理は admin のみ（RequireAdmin で二重ガード） */}
+        <Route path="sale-plans" element={<SalePlanList />} />
         <Route path="import" element={<CsvImport />} />
         <Route path="users" element={<RequireAdmin><UserManagement /></RequireAdmin>} />
       </Route>

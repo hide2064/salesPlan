@@ -209,7 +209,40 @@ export async function initSchema(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    // ── テーブル6: users (ユーザー認証・権限管理) ────────────────
+    // ── テーブル6: sale_plans (売上予定案件) ─────────────────────
+    // 案件レベルの売上予定を管理。製品・日付・金額・顧客単位で登録する。
+    // status: 'pending'=予定中, 'converted'=売上登録済み
+    // sales_id: 転換後の sales.id（nullable）
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS sale_plans (
+        id            INT            NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        plan_date     DATE           NOT NULL,
+        \`year\`      SMALLINT       NOT NULL,
+        \`month\`     TINYINT        NOT NULL,
+        \`year_month\`    CHAR(7)        NOT NULL,
+        category_id   INT            NOT NULL,
+        product_id    INT            NULL,
+        quantity      DECIMAL(15,4)  NOT NULL DEFAULT 1,
+        unit_price    DECIMAL(15,2)  NOT NULL,
+        cost_price    DECIMAL(15,2)  NULL,
+        amount        DECIMAL(15,2)  NOT NULL,
+        cost_amount   DECIMAL(15,2)  NULL,
+        customer_name VARCHAR(200)   NULL,
+        department    VARCHAR(100)   NULL,
+        section       VARCHAR(100)   NULL,
+        description   TEXT           NULL,
+        status        ENUM('pending','converted') NOT NULL DEFAULT 'pending',
+        sales_id      INT            NULL,
+        created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_sale_plans_year_month (\`year_month\`),
+        INDEX idx_sale_plans_status (status),
+        CONSTRAINT fk_sale_plans_category FOREIGN KEY (category_id) REFERENCES categories(id),
+        CONSTRAINT fk_sale_plans_product  FOREIGN KEY (product_id)  REFERENCES products(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // ── テーブル7: users (ユーザー認証・権限管理) ────────────────
     // JWT 認証で使用するユーザー情報を管理。
     // password_hash: bcrypt でハッシュ化したパスワード (平文は保存しない)
     // role: admin > manager > viewer の3段階権限
