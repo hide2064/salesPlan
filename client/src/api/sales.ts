@@ -12,7 +12,7 @@
  */
 
 import api from './client';
-import type { Sale, SaleListResponse } from '../types';
+import type { Sale, SaleListResponse, DepartmentSummary } from '../types';
 
 /**
  * 売上一覧フィルタ条件
@@ -26,6 +26,8 @@ export interface SaleFilters {
   product_id?: number;
   /** 顧客名（部分一致） */
   customer_name?: string;
+  /** 部署名（部分一致） */
+  department?: string;
   /** ページ番号（1始まり） */
   page?: number;
   /** 1ページあたりの件数 */
@@ -68,3 +70,14 @@ export const updateSale = (id: number, data: Partial<Sale>) =>
  */
 export const deleteSale = (id: number) =>
   api.delete(`/sales/${id}`);
+
+/**
+ * 部署別売上集計を取得する。
+ *
+ * @param params.year_month - 対象年月 (YYYY-MM)
+ * @param params.from       - 開始年月 (YYYY-MM)
+ * @param params.to         - 終了年月 (YYYY-MM)
+ * @returns DepartmentSummary[] — 部署ごとの売上合計・利益の降順
+ */
+export const fetchSalesByDepartment = (params: { year_month?: string; from?: string; to?: string }) =>
+  api.get<DepartmentSummary[]>('/sales/by-department', { params }).then((r) => r.data);

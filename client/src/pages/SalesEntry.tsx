@@ -47,6 +47,7 @@ const schema = z.object({
   amount: z.coerce.number().min(0, '0以上'),
   cost_amount: z.coerce.number().min(0).optional().nullable(),
   customer_name: z.string().max(200).optional(),
+  department: z.string().max(100).optional(),
   description: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -162,6 +163,11 @@ export default function SalesEntry() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">顧客名</label>
             <input type="text" {...register('customer_name')} className="w-full border rounded px-3 py-2 text-sm" placeholder="顧客・取引先名" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">部署</label>
+            <input type="text" {...register('department')} className="w-full border rounded px-3 py-2 text-sm" placeholder="売上計上部署（任意）" />
           </div>
 
           <div>

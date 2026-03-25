@@ -55,7 +55,7 @@ function toYearMonth(date: string): string {
  *   profit_amount / profit_rate は SQL で計算して付加
  */
 router.get('/', async (req: any, res: any) => {
-  const { year_month, category_id, product_id, customer_name, page = '1', limit = '50' } = req.query;
+  const { year_month, category_id, product_id, customer_name, department, page = '1', limit = '50' } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   // メインクエリ: categories・products を JOIN して名前も取得
@@ -76,19 +76,20 @@ router.get('/', async (req: any, res: any) => {
   const params: any[] = [];
 
   // 動的 WHERE 条件: 指定されたパラメータのみ追加
-  if (year_month)    { sql += ' AND s.`year_month` = ?';         params.push(year_month); }
+  if (year_month)    { sql += ' AND s.`year_month` = ?';       params.push(year_month); }
   if (category_id)   { sql += ' AND s.category_id = ?';        params.push(category_id); }
   if (product_id)    { sql += ' AND s.product_id = ?';         params.push(product_id); }
   if (customer_name) { sql += ' AND s.customer_name LIKE ?';   params.push(`%${customer_name}%`); }
+  if (department)    { sql += ' AND s.department LIKE ?';      params.push(`%${department}%`); }
 
   // 件数取得: ページネーションの総件数表示に使用
-  // メインクエリと同じ WHERE 条件で COUNT(*) を実行
   const [countRows]: any = await pool.query(
     `SELECT COUNT(*) AS total FROM sales s WHERE 1=1${
-      year_month    ? ' AND s.`year_month` = ?'        : ''}${
+      year_month    ? ' AND s.`year_month` = ?'      : ''}${
       category_id   ? ' AND s.category_id = ?'       : ''}${
       product_id    ? ' AND s.product_id = ?'        : ''}${
-      customer_name ? ' AND s.customer_name LIKE ?' : ''}`,
+      customer_name ? ' AND s.customer_name LIKE ?' : ''}${
+      department    ? ' AND s.department LIKE ?'    : ''}`,
     params
   );
   const total = countRows[0].total;
@@ -99,6 +100,47 @@ router.get('/', async (req: any, res: any) => {
 
   const [rows] = await pool.query(sql, params);
   res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/sales/by-department
+// 部署別集計: 指定期間の部署ごとの売上・利益サマリ
+// ─────────────────────────────────────────────────────────────
+router.get('/by-department', async (req: any, res: any) => {
+  const { year_month, from, to } = req.query;
+
+  let where = 'WHERE 1=1';
+  const params: any[] = [];
+
+  if (year_month) { where += ' AND s.`year_month` = ?'; params.push(year_month); }
+  if (from)       { where += ' AND s.`year_month` >= ?'; params.push(from); }
+  if (to)         { where += ' AND s.`year_month` <= ?'; params.push(to); }
+
+  const [rows]: any = await pool.query(
+    `SELECT
+       IFNULL(s.department, '（未設定）') AS department,
+       COUNT(*)                           AS sales_count,
+       SUM(s.amount)                      AS total_amount,
+       SUM(IFNULL(s.cost_amount, 0))      AS total_cost,
+       SUM(s.amount - IFNULL(s.cost_amount, 0)) AS total_profit,
+       CASE WHEN SUM(s.amount) > 0
+            THEN ROUND(SUM(s.amount - IFNULL(s.cost_amount, 0)) / SUM(s.amount) * 100, 2)
+            ELSE 0 END AS profit_rate
+     FROM sales s
+     ${where}
+     GROUP BY s.department
+     ORDER BY total_amount DESC`,
+    params
+  );
+
+  res.json(rows.map((r: any) => ({
+    department:   r.department,
+    sales_count:  r.sales_count,
+    total_amount: parseFloat(r.total_amount) || 0,
+    total_cost:   parseFloat(r.total_cost)   || 0,
+    total_profit: parseFloat(r.total_profit) || 0,
+    profit_rate:  parseFloat(r.profit_rate)  || 0,
+  })));
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -132,6 +174,7 @@ router.post(
     body('amount').isFloat({ min: 0 }),
     body('cost_amount').optional({ nullable: true }).isFloat({ min: 0 }),
     body('customer_name').optional().trim().isLength({ max: 200 }),
+    body('department').optional().trim().isLength({ max: 100 }),
     body('description').optional().trim(),
   ],
   async (req: any, res: any) => {
@@ -140,7 +183,7 @@ router.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { sale_date, category_id, product_id, quantity, unit_price, cost_price,
-            amount, cost_amount, customer_name, description } = req.body;
+            amount, cost_amount, customer_name, department, description } = req.body;
 
     // sale_date から year / month / year_month を導出
     const ym    = toYearMonth(sale_date);
@@ -150,11 +193,11 @@ router.post(
     const [result]: any = await pool.query(
       `INSERT INTO sales
        (sale_date, \`year\`, \`month\`, \`year_month\`, category_id, product_id, quantity,
-        unit_price, cost_price, amount, cost_amount, customer_name, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        unit_price, cost_price, amount, cost_amount, customer_name, department, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [sale_date, year, month, ym, category_id, product_id ?? null, quantity,
        unit_price, cost_price ?? null, amount, cost_amount ?? null,
-       customer_name ?? null, description ?? null]
+       customer_name ?? null, department ?? null, description ?? null]
     );
 
     // 挿入した行を JOIN 付きで再取得してレスポンス
@@ -195,7 +238,7 @@ router.put(
 
     // 更新を許可するフィールドのホワイトリスト (SQL インジェクション防止)
     const allowed = ['category_id', 'product_id', 'quantity', 'unit_price', 'cost_price',
-                     'amount', 'cost_amount', 'customer_name', 'description'];
+                     'amount', 'cost_amount', 'customer_name', 'department', 'description'];
     const fields: string[] = [];
     const values: any[] = [];
 

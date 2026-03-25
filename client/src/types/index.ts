@@ -101,9 +101,23 @@ export interface Sale {
   /** SQL計算値: profit_amount / amount * 100 (%) */
   profit_rate: number | null;
   customer_name: string | null;
+  /** 売上を計上した部署名（任意） */
+  department: string | null;
   description: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 部署別売上集計（/api/sales/by-department のレスポンス）。
+ */
+export interface DepartmentSummary {
+  department: string;
+  sales_count: number;
+  total_amount: number;
+  total_cost: number;
+  total_profit: number;
+  profit_rate: number;
 }
 
 /**
