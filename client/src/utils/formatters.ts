@@ -55,9 +55,11 @@ export const formatNumber = (value: number | null | undefined): string => {
  * @param digits - 小数点以下桁数（デフォルト: 1）
  * @returns パーセント文字列。null/undefinedは '-'
  */
-export const formatPercent = (value: number | null | undefined, digits = 1): string => {
+export const formatPercent = (value: number | string | null | undefined, digits = 1): string => {
   if (value == null) return '-';
-  return `${value.toFixed(digits)}%`;
+  const num = Number(value);
+  if (isNaN(num)) return '-';
+  return `${num.toFixed(digits)}%`;
 };
 
 /**

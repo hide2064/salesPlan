@@ -154,9 +154,16 @@ router.get('/month-comparison', async (req: any, res: any) => {
     [month1, month1, month1, month2, month2, month2, month1, month2]
   );
 
-  // 差分・増減率・利益率を計算して付加
+  // 差分・増減率・利益率を計算して付加（mysql2はDECIMALを文字列で返すのでparseFloat必須）
   const data = rows.map((r: any) => ({
-    ...r,
+    category_id:  r.category_id,
+    category_name: r.category_name,
+    amount1:  parseFloat(r.amount1)  || 0,
+    cost1:    parseFloat(r.cost1)    || 0,
+    profit1:  parseFloat(r.profit1)  || 0,
+    amount2:  parseFloat(r.amount2)  || 0,
+    cost2:    parseFloat(r.cost2)    || 0,
+    profit2:  parseFloat(r.profit2)  || 0,
     // 差分金額: month2 - month1 (正なら増加、負なら減少)
     diff_amount: parseFloat(r.amount2) - parseFloat(r.amount1),
     // 増減率 (%): amount1 が 0 の場合は null
@@ -213,7 +220,20 @@ router.get('/actual-vs-forecast', async (req: any, res: any) => {
     [year_month, year_month]
   );
 
-  res.json({ year_month, data: rows });
+  // mysql2 は DECIMAL 型を文字列で返すため、数値に変換する
+  const data = rows.map((r: any) => ({
+    category_id:       r.category_id,
+    category_name:     r.category_name,
+    actual_amount:     parseFloat(r.actual_amount)     || 0,
+    actual_cost:       parseFloat(r.actual_cost)       || 0,
+    actual_profit:     parseFloat(r.actual_profit)     || 0,
+    forecast_amount:   r.forecast_amount   != null ? parseFloat(r.forecast_amount)   : null,
+    forecast_cost_rate:r.forecast_cost_rate!= null ? parseFloat(r.forecast_cost_rate): null,
+    forecast_profit:   r.forecast_profit   != null ? parseFloat(r.forecast_profit)   : null,
+    achievement_rate:  r.achievement_rate  != null ? parseFloat(r.achievement_rate)  : null,
+  }));
+
+  res.json({ year_month, data });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -265,7 +285,15 @@ router.get('/profit-analysis', async (req: any, res: any) => {
     params
   );
 
-  res.json(rows);
+  // mysql2 は DECIMAL 型を文字列で返すため、数値に変換する
+  res.json(rows.map((r: any) => ({
+    ...r,
+    total_quantity: parseFloat(r.total_quantity) || 0,
+    total_amount:   parseFloat(r.total_amount)   || 0,
+    total_cost:     parseFloat(r.total_cost)     || 0,
+    total_profit:   parseFloat(r.total_profit)   || 0,
+    profit_rate:    parseFloat(r.profit_rate)    || 0,
+  })));
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -317,7 +345,15 @@ router.get('/product-ranking', async (req: any, res: any) => {
     params
   );
 
-  res.json(rows);
+  // mysql2 は DECIMAL 型を文字列で返すため、数値に変換する
+  res.json(rows.map((r: any) => ({
+    ...r,
+    total_quantity: parseFloat(r.total_quantity) || 0,
+    total_amount:   parseFloat(r.total_amount)   || 0,
+    total_cost:     parseFloat(r.total_cost)     || 0,
+    total_profit:   parseFloat(r.total_profit)   || 0,
+    profit_rate:    parseFloat(r.profit_rate)    || 0,
+  })));
 });
 
 export default router;
