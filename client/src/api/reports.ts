@@ -23,6 +23,8 @@ import type {
   ActualVsForecastRow,
   ProfitAnalysisRow,
   ProductRankingRow,
+  SalePlanMonthlySummary,
+  SalePlanCategoryRow,
 } from '../types';
 
 /**
@@ -100,3 +102,11 @@ export const fetchProductRanking = (params?: {
   category_id?: number;
   limit?: number;
 }) => api.get<ProductRankingRow[]>('/reports/product-ranking', { params }).then((r) => r.data);
+
+/** 売上予定案件の月次集計（グラフ・KPI用） */
+export const fetchSalePlansMonthlySummary = (params?: { from?: string; to?: string }) =>
+  api.get<SalePlanMonthlySummary[]>('/reports/sale-plans-monthly', { params }).then((r) => r.data);
+
+/** 売上予定案件のカテゴリ別集計（当月テーブル用） */
+export const fetchSalePlansByCategory = (year_month: string) =>
+  api.get<SalePlanCategoryRow[]>('/reports/sale-plans-by-category', { params: { year_month } }).then((r) => r.data);

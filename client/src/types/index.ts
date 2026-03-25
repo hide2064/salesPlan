@@ -282,6 +282,34 @@ export interface ProfitAnalysisRow {
 }
 
 /**
+ * 売上予定案件の月次集計（/api/reports/sale-plans-monthly のレスポンス行）。
+ */
+export interface SalePlanMonthlySummary {
+  year_month: string;
+  total_count: number;
+  pending_count: number;
+  converted_count: number;
+  pending_amount: number;
+  converted_amount: number;
+  total_amount: number;
+  pending_profit: number;
+}
+
+/**
+ * 売上予定案件のカテゴリ別集計（/api/reports/sale-plans-by-category のレスポンス行）。
+ */
+export interface SalePlanCategoryRow {
+  category_id: number;
+  category_name: string;
+  total_count: number;
+  pending_count: number;
+  converted_count: number;
+  pending_amount: number;
+  converted_amount: number;
+  pending_profit: number;
+}
+
+/**
  * 製品別ランキングの1行（集計期間全体）。
  * total_amount の降順でソートされて返される。
  */

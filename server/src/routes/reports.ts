@@ -356,4 +356,101 @@ router.get('/product-ranking', async (req: any, res: any) => {
   })));
 });
 
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/sale-plans-monthly
+// 売上予定案件の月次集計（ダッシュボードグラフ・KPI用）
+// ─────────────────────────────────────────────────────────────
+/**
+ * クエリパラメータ:
+ *   from : 開始年月 "YYYY-MM"
+ *   to   : 終了年月 "YYYY-MM"
+ *
+ * レスポンス: 月ごとの pending/converted 件数・金額
+ */
+router.get('/sale-plans-monthly', async (req: any, res: any) => {
+  const { from, to } = req.query;
+
+  let where = 'WHERE 1=1';
+  const params: any[] = [];
+  if (from) { where += ' AND sp.`year_month` >= ?'; params.push(from); }
+  if (to)   { where += ' AND sp.`year_month` <= ?'; params.push(to); }
+
+  const [rows]: any = await pool.query(
+    `SELECT
+       sp.\`year_month\`,
+       COUNT(*)                                                                  AS total_count,
+       SUM(CASE WHEN sp.status = 'pending'   THEN 1 ELSE 0 END)                 AS pending_count,
+       SUM(CASE WHEN sp.status = 'converted' THEN 1 ELSE 0 END)                 AS converted_count,
+       SUM(CASE WHEN sp.status = 'pending'   THEN sp.amount       ELSE 0 END)   AS pending_amount,
+       SUM(CASE WHEN sp.status = 'converted' THEN sp.amount       ELSE 0 END)   AS converted_amount,
+       SUM(sp.amount)                                                            AS total_amount,
+       SUM(CASE WHEN sp.status = 'pending'
+               THEN sp.amount - IFNULL(sp.cost_amount, 0) ELSE 0 END)           AS pending_profit
+     FROM sale_plans sp
+     ${where}
+     GROUP BY sp.\`year_month\`
+     ORDER BY sp.\`year_month\``,
+    params
+  );
+
+  res.json(rows.map((r: any) => ({
+    year_month:       r.year_month,
+    total_count:      parseInt(r.total_count)      || 0,
+    pending_count:    parseInt(r.pending_count)    || 0,
+    converted_count:  parseInt(r.converted_count)  || 0,
+    pending_amount:   parseFloat(r.pending_amount)   || 0,
+    converted_amount: parseFloat(r.converted_amount) || 0,
+    total_amount:     parseFloat(r.total_amount)     || 0,
+    pending_profit:   parseFloat(r.pending_profit)   || 0,
+  })));
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/sale-plans-by-category
+// 売上予定案件のカテゴリ別集計（ダッシュボード当月テーブル用）
+// ─────────────────────────────────────────────────────────────
+/**
+ * クエリパラメータ:
+ *   year_month : 対象年月 "YYYY-MM" (必須)
+ *
+ * categories を起点に LEFT JOIN するため件数ゼロのカテゴリも含まれる。
+ */
+router.get('/sale-plans-by-category', async (req: any, res: any) => {
+  const { year_month } = req.query;
+  if (!year_month) return res.status(400).json({ error: 'year_month が必要です' });
+
+  const [rows]: any = await pool.query(
+    `SELECT
+       c.id   AS category_id,
+       c.name AS category_name,
+       COUNT(sp.id)                                                              AS total_count,
+       SUM(CASE WHEN sp.status = 'pending'   THEN 1 ELSE 0 END)                 AS pending_count,
+       SUM(CASE WHEN sp.status = 'converted' THEN 1 ELSE 0 END)                 AS converted_count,
+       IFNULL(SUM(CASE WHEN sp.status = 'pending'
+                       THEN sp.amount ELSE 0 END), 0)                           AS pending_amount,
+       IFNULL(SUM(CASE WHEN sp.status = 'converted'
+                       THEN sp.amount ELSE 0 END), 0)                           AS converted_amount,
+       IFNULL(SUM(CASE WHEN sp.status = 'pending'
+                       THEN sp.amount - IFNULL(sp.cost_amount, 0) ELSE 0 END), 0) AS pending_profit
+     FROM categories c
+     LEFT JOIN sale_plans sp
+       ON sp.category_id = c.id AND sp.\`year_month\` = ?
+     WHERE c.is_active = 1
+     GROUP BY c.id, c.name
+     ORDER BY c.sort_order`,
+    [year_month]
+  );
+
+  res.json(rows.map((r: any) => ({
+    category_id:      r.category_id,
+    category_name:    r.category_name,
+    total_count:      parseInt(r.total_count)      || 0,
+    pending_count:    parseInt(r.pending_count)    || 0,
+    converted_count:  parseInt(r.converted_count)  || 0,
+    pending_amount:   parseFloat(r.pending_amount)   || 0,
+    converted_amount: parseFloat(r.converted_amount) || 0,
+    pending_profit:   parseFloat(r.pending_profit)   || 0,
+  })));
+});
+
 export default router;
