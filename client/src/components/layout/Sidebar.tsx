@@ -35,6 +35,7 @@ export default function Sidebar() {
     { to: '/sales/list',  label: '売上一覧',       always: true },
     { to: '/products',    label: '製品管理',       always: true },
     { to: '/forecasts',   label: '予定売上管理',   always: true },
+    { to: '/import',      label: 'CSV取込',        writeOnly: true },
     { to: '/comparison',  label: '月別比較',       always: true },
     { to: '/profit',      label: '利益分析',       always: true },
     { to: '/users',       label: 'ユーザー管理',   adminOnly: true },
