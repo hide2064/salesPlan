@@ -87,8 +87,8 @@ router.post('/sales', async (req: any, res: any) => {
   if (!Array.isArray(rows) || rows.length === 0) {
     return res.status(400).json({ error: 'rows が空です' });
   }
-  if (rows.length > 1000) {
-    return res.status(400).json({ error: '一度に取り込めるのは1000件までです' });
+  if (rows.length > 2000) {
+    return res.status(400).json({ error: '一度に取り込めるのは2000件までです' });
   }
 
   // カテゴリ・製品をキャッシュ（ループ内で毎回SQLを発行しないよう事前取得）

@@ -38,7 +38,7 @@ const api = axios.create({
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    const msg = err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || err.message;
+    const msg = err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || err.response?.data?.errors?.[0]?.message || err.message;
     return Promise.reject(new Error(msg));
   }
 );
