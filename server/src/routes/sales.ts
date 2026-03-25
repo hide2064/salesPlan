@@ -76,7 +76,7 @@ router.get('/', async (req: any, res: any) => {
   const params: any[] = [];
 
   // 動的 WHERE 条件: 指定されたパラメータのみ追加
-  if (year_month)    { sql += ' AND s.year_month = ?';         params.push(year_month); }
+  if (year_month)    { sql += ' AND s.`year_month` = ?';         params.push(year_month); }
   if (category_id)   { sql += ' AND s.category_id = ?';        params.push(category_id); }
   if (product_id)    { sql += ' AND s.product_id = ?';         params.push(product_id); }
   if (customer_name) { sql += ' AND s.customer_name LIKE ?';   params.push(`%${customer_name}%`); }
@@ -85,7 +85,7 @@ router.get('/', async (req: any, res: any) => {
   // メインクエリと同じ WHERE 条件で COUNT(*) を実行
   const [countRows]: any = await pool.query(
     `SELECT COUNT(*) AS total FROM sales s WHERE 1=1${
-      year_month    ? ' AND s.year_month = ?'        : ''}${
+      year_month    ? ' AND s.`year_month` = ?'        : ''}${
       category_id   ? ' AND s.category_id = ?'       : ''}${
       product_id    ? ' AND s.product_id = ?'        : ''}${
       customer_name ? ' AND s.customer_name LIKE ?' : ''}`,
@@ -149,7 +149,7 @@ router.post(
 
     const [result]: any = await pool.query(
       `INSERT INTO sales
-       (sale_date, year, month, year_month, category_id, product_id, quantity,
+       (sale_date, \`year\`, \`month\`, \`year_month\`, category_id, product_id, quantity,
         unit_price, cost_price, amount, cost_amount, customer_name, description)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [sale_date, year, month, ym, category_id, product_id ?? null, quantity,
@@ -202,7 +202,7 @@ router.put(
     // sale_date が更新される場合は関連するカラムも同時更新
     if (req.body.sale_date) {
       const ym = toYearMonth(req.body.sale_date);
-      fields.push('sale_date = ?', 'year = ?', 'month = ?', 'year_month = ?');
+      fields.push('sale_date = ?', '`year` = ?', '`month` = ?', '`year_month` = ?');
       values.push(req.body.sale_date, parseInt(ym.substring(0, 4)), parseInt(ym.substring(5, 7)), ym);
     }
 

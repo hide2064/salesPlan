@@ -16,6 +16,7 @@
  * ─────────────────────────────────────────────────────────────
  */
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 
 /**
  * コネクションプール
@@ -37,11 +38,11 @@ const pool = mysql.createPool({
   user:     process.env.DB_USER     || 'salesuser',
   password: process.env.DB_PASSWORD || 'salespass',
   database: process.env.DB_NAME     || 'sales_plan',
-  waitForConnections: true,  // 接続数上限時にエラーでなくキュー待ち
-  connectionLimit: 10,        // プール内最大同時接続数
-  queueLimit: 0,              // 0 = キュー上限なし
-  timezone: '+09:00',         // JST タイムゾーン
-  charset: 'utf8mb4',         // 絵文字・全角文字対応
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  timezone: '+09:00',
+  charset: 'utf8mb4',
 });
 
 /**
@@ -72,9 +73,9 @@ export async function initSchema(): Promise<void> {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS categories (
         id         INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        name       VARCHAR(100) NOT NULL,           -- カテゴリ名 (一意)
-        sort_order INT          NOT NULL DEFAULT 0, -- 画面表示順
-        is_active  TINYINT(1)   NOT NULL DEFAULT 1, -- 1=有効, 0=無効(論理削除)
+        name       VARCHAR(100) NOT NULL,
+        sort_order INT          NOT NULL DEFAULT 0,
+        is_active  TINYINT(1)   NOT NULL DEFAULT 1,
         created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uk_categories_name (name)
@@ -90,33 +91,32 @@ export async function initSchema(): Promise<void> {
         id                 INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
         category_id        INT           NOT NULL,
         name               VARCHAR(200)  NOT NULL,
-        code               VARCHAR(50)   NULL,              -- 製品コード (任意・一意)
-        unit               VARCHAR(20)   DEFAULT '個',      -- 数量単位 (個/本/式/etc.)
-        default_cost_price DECIMAL(15,2) NULL,              -- 標準原価 (入力フォーム初期値)
-        default_unit_price DECIMAL(15,2) NULL,              -- 標準販売単価 (入力フォーム初期値)
+        code               VARCHAR(50)   NULL,
+        unit               VARCHAR(20)   DEFAULT '個',
+        default_cost_price DECIMAL(15,2) NULL,
+        default_unit_price DECIMAL(15,2) NULL,
         is_active          TINYINT(1)    NOT NULL DEFAULT 1,
         created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uk_products_code (code),
-        INDEX idx_products_category (category_id),  -- カテゴリ別絞り込みを高速化
+        INDEX idx_products_category (category_id),
         CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
     // ── テーブル3: product_price_history (製品価格改定履歴) ──────
     // 標準価格の改定履歴を追跡する。
-    // valid_from: 適用開始日。最新の valid_from <= 対象日 が現在の標準価格。
+    // valid_from: 適用開始日。最新の valid_from 以下の日付が現在の標準価格。
     // ※ 取引ごとの実際価格は sales テーブルに記録するため別管理。
     await conn.query(`
       CREATE TABLE IF NOT EXISTS product_price_history (
         id         INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
         product_id INT           NOT NULL,
-        valid_from DATE          NOT NULL,    -- この日以降の取引に適用される標準価格
-        cost_price DECIMAL(15,2) NULL,        -- 改定後の標準原価
-        unit_price DECIMAL(15,2) NULL,        -- 改定後の標準販売単価
-        reason     VARCHAR(500)  NULL,        -- 改定理由 (仕入れ値変動・値上げ等)
+        valid_from DATE          NOT NULL,
+        cost_price DECIMAL(15,2) NULL,
+        unit_price DECIMAL(15,2) NULL,
+        reason     VARCHAR(500)  NULL,
         created_at DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        -- 複合インデックス: 製品IDと適用日での検索を最適化
         INDEX idx_price_history_lookup (product_id, valid_from),
         CONSTRAINT fk_price_history_product FOREIGN KEY (product_id) REFERENCES products(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -136,28 +136,27 @@ export async function initSchema(): Promise<void> {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS sales (
         id            INT            NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        sale_date     DATE           NOT NULL,         -- 売上日 (YYYY-MM-DD)
-        year          SMALLINT       NOT NULL,         -- 分析用: YEAR(sale_date) の冗長コピー
-        month         TINYINT        NOT NULL,         -- 分析用: MONTH(sale_date) の冗長コピー
-        year_month    CHAR(7)        NOT NULL,         -- 集計用: "YYYY-MM" 形式
-        category_id   INT            NOT NULL,         -- カテゴリ (必須)
-        product_id    INT            NULL,             -- 製品 (任意: 製品なし売上も可)
-        quantity      DECIMAL(15,4)  NOT NULL DEFAULT 1, -- 数量 (小数対応: 0.5本等)
-        unit_price    DECIMAL(15,2)  NOT NULL,         -- 実際の販売単価 (取引単位)
-        cost_price    DECIMAL(15,2)  NULL,             -- 実際の原価単価 (取引単位)
-        amount        DECIMAL(15,2)  NOT NULL,         -- 売上金額 (割引後調整も可)
-        cost_amount   DECIMAL(15,2)  NULL,             -- 原価合計
-        customer_name VARCHAR(200)   NULL,             -- 顧客・取引先名
-        description   TEXT           NULL,             -- 備考・案件名等
+        sale_date     DATE           NOT NULL,
+        \`year\`      SMALLINT       NOT NULL,
+        \`month\`     TINYINT        NOT NULL,
+        \`year_month\`    CHAR(7)        NOT NULL,
+        category_id   INT            NOT NULL,
+        product_id    INT            NULL,
+        quantity      DECIMAL(15,4)  NOT NULL DEFAULT 1,
+        unit_price    DECIMAL(15,2)  NOT NULL,
+        cost_price    DECIMAL(15,2)  NULL,
+        amount        DECIMAL(15,2)  NOT NULL,
+        cost_amount   DECIMAL(15,2)  NULL,
+        customer_name VARCHAR(200)   NULL,
+        description   TEXT           NULL,
         created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        -- 月次集計クエリ最適化インデックス
-        INDEX idx_sales_year_month  (year_month),       -- GROUP BY year_month
-        INDEX idx_sales_year_month2 (year, month),      -- GROUP BY year, month
-        INDEX idx_sales_category    (category_id),      -- カテゴリ別絞り込み
-        INDEX idx_sales_product     (product_id),       -- 製品別絞り込み
-        INDEX idx_sales_customer    (customer_name),    -- 顧客別分析
-        INDEX idx_sales_date        (sale_date),        -- 日付範囲検索
+        INDEX idx_sales_year_month  (\`year_month\`),
+        INDEX idx_sales_year_month2 (\`year\`, \`month\`),
+        INDEX idx_sales_category    (category_id),
+        INDEX idx_sales_product     (product_id),
+        INDEX idx_sales_customer    (customer_name),
+        INDEX idx_sales_date        (sale_date),
         CONSTRAINT fk_sales_category FOREIGN KEY (category_id) REFERENCES categories(id),
         CONSTRAINT fk_sales_product  FOREIGN KEY (product_id)  REFERENCES products(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -171,18 +170,17 @@ export async function initSchema(): Promise<void> {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS forecasts (
         id                 INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        year_month         CHAR(7)       NOT NULL,       -- 対象年月 "YYYY-MM"
-        year               SMALLINT      NOT NULL,       -- 分析用冗長カラム
-        month              TINYINT       NOT NULL,       -- 分析用冗長カラム
+        \`year_month\`         CHAR(7)       NOT NULL,
+        \`year\`           SMALLINT      NOT NULL,
+        \`month\`          TINYINT       NOT NULL,
         category_id        INT           NOT NULL,
-        forecast_amount    DECIMAL(15,2) NOT NULL,       -- 予定売上金額
-        forecast_cost_rate DECIMAL(5,4)  NULL,           -- 予定原価率 (0.0000〜1.0000)
-        notes              TEXT          NULL,           -- 備考
+        forecast_amount    DECIMAL(15,2) NOT NULL,
+        forecast_cost_rate DECIMAL(5,4)  NULL,
+        notes              TEXT          NULL,
         created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        -- upsert を可能にするユニーク制約
-        UNIQUE KEY uk_forecasts_month_category (year_month, category_id),
-        INDEX idx_forecasts_year_month (year_month),
+        UNIQUE KEY uk_forecasts_month_category (\`year_month\`, category_id),
+        INDEX idx_forecasts_year_month (\`year_month\`),
         CONSTRAINT fk_forecasts_category FOREIGN KEY (category_id) REFERENCES categories(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
@@ -195,11 +193,11 @@ export async function initSchema(): Promise<void> {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS users (
         id            INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        username      VARCHAR(50)  NOT NULL,               -- ログインID (一意)
-        password_hash VARCHAR(100) NOT NULL,               -- bcrypt ハッシュ
+        username      VARCHAR(50)  NOT NULL,
+        password_hash VARCHAR(100) NOT NULL,
         role          ENUM('admin','manager','viewer') NOT NULL DEFAULT 'viewer',
-        display_name  VARCHAR(100) NOT NULL,               -- 画面表示名
-        is_active     TINYINT(1)   NOT NULL DEFAULT 1,     -- 1=有効, 0=無効
+        display_name  VARCHAR(100) NOT NULL,
+        is_active     TINYINT(1)   NOT NULL DEFAULT 1,
         created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uk_users_username (username)
@@ -210,7 +208,6 @@ export async function initSchema(): Promise<void> {
     // admin ユーザーが存在しない場合のみ INSERT する。
     // パスワード: Admin1234! → bcrypt ハッシュ化 (コスト係数 10)
     // ※ 本番運用開始前に必ずパスワードを変更すること
-    const bcrypt = await import('bcryptjs');
     const [existing]: any = await conn.query("SELECT id FROM users WHERE username = 'admin'");
     if (existing.length === 0) {
       const hash = await bcrypt.hash('Admin1234!', 10);

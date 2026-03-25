@@ -49,12 +49,12 @@ router.get('/', async (req: any, res: any) => {
   `;
   const params: any[] = [];
 
-  if (year_month) { sql += ' AND f.year_month = ?';  params.push(year_month); }
-  if (from)       { sql += ' AND f.year_month >= ?'; params.push(from); }
-  if (to)         { sql += ' AND f.year_month <= ?'; params.push(to); }
+  if (year_month) { sql += ' AND f.`year_month` = ?';  params.push(year_month); }
+  if (from)       { sql += ' AND f.`year_month` >= ?'; params.push(from); }
+  if (to)         { sql += ' AND f.`year_month` <= ?'; params.push(to); }
 
   // 年月順 → カテゴリの sort_order 順で並べる
-  sql += ' ORDER BY f.year_month, c.sort_order';
+  sql += ' ORDER BY f.`year_month`, c.sort_order';
 
   const [rows] = await pool.query(sql, params);
   res.json(rows);
@@ -97,7 +97,7 @@ router.post(
 
     // upsert: 同月同カテゴリが既存なら金額・原価率・備考を更新
     const [result]: any = await pool.query(
-      `INSERT INTO forecasts (year_month, year, month, category_id, forecast_amount, forecast_cost_rate, notes)
+      `INSERT INTO forecasts (\`year_month\`, \`year\`, \`month\`, category_id, forecast_amount, forecast_cost_rate, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          forecast_amount    = VALUES(forecast_amount),
@@ -111,7 +111,7 @@ router.post(
     const [rows]: any = await pool.query(
       `SELECT f.*, c.name AS category_name FROM forecasts f
        JOIN categories c ON f.category_id = c.id
-       WHERE f.year_month = ? AND f.category_id = ?`,
+       WHERE f.\`year_month\` = ? AND f.category_id = ?`,
       [year_month, category_id]
     );
     res.status(201).json(rows[0]);

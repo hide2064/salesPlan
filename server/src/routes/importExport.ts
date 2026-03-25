@@ -163,7 +163,7 @@ router.post('/sales', async (req: any, res: any) => {
       for (const vals of inserts) {
         await conn.query(
           `INSERT INTO sales
-           (sale_date, year, month, year_month, category_id, product_id, quantity,
+           (sale_date, \`year\`, \`month\`, \`year_month\`, category_id, product_id, quantity,
             unit_price, cost_price, amount, cost_amount, customer_name, description)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           vals
@@ -219,9 +219,9 @@ router.get('/sales', async (req: any, res: any) => {
   `;
   const params: any[] = [];
 
-  if (year_month) { sql += ' AND s.year_month = ?'; params.push(year_month); }
-  if (from) { sql += ' AND s.year_month >= ?'; params.push(from); }
-  if (to) { sql += ' AND s.year_month <= ?'; params.push(to); }
+  if (year_month) { sql += ' AND s.`year_month` = ?'; params.push(year_month); }
+  if (from) { sql += ' AND s.`year_month` >= ?'; params.push(from); }
+  if (to) { sql += ' AND s.`year_month` <= ?'; params.push(to); }
   if (category_id) { sql += ' AND s.category_id = ?'; params.push(category_id); }
   sql += ' ORDER BY s.sale_date, s.id';
 

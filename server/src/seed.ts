@@ -106,7 +106,7 @@ async function main() {
                          catName === 'ソフトウェア' ? 0.22 :
                          catName === 'コンサルティング' ? 0.45 : 0.38;
         await conn.query(
-          `INSERT INTO forecasts (year_month, year, month, category_id, forecast_amount, forecast_cost_rate)
+          `INSERT INTO forecasts (\`year_month\`, \`year\`, \`month\`, category_id, forecast_amount, forecast_cost_rate)
            VALUES (?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE forecast_amount = VALUES(forecast_amount)`,
           [ym, d.getFullYear(), d.getMonth() + 1, catId, forecastAmount, costRate]
@@ -144,7 +144,7 @@ async function main() {
 
         const [res]: any = await conn.query(
           `INSERT INTO sales
-           (sale_date, year, month, year_month, category_id, product_id, quantity,
+           (sale_date, \`year\`, \`month\`, \`year_month\`, category_id, product_id, quantity,
             unit_price, cost_price, amount, cost_amount, customer_name)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [saleDate, year, month, ym, prod.category_id, prod.id, quantity,

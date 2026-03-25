@@ -48,27 +48,27 @@ router.get('/monthly-summary', async (req: any, res: any) => {
 
   // 期間フィルタ: sales と forecasts 両方に同じ条件を適用
   if (from) {
-    whereSales    += ' AND s.year_month >= ?'; salesParams.push(from);
-    whereForecast += ' AND f.year_month >= ?'; forecastParams.push(from);
+    whereSales    += ' AND s.`year_month` >= ?'; salesParams.push(from);
+    whereForecast += ' AND f.`year_month` >= ?'; forecastParams.push(from);
   }
   if (to) {
-    whereSales    += ' AND s.year_month <= ?'; salesParams.push(to);
-    whereForecast += ' AND f.year_month <= ?'; forecastParams.push(to);
+    whereSales    += ' AND s.`year_month` <= ?'; salesParams.push(to);
+    whereForecast += ' AND f.`year_month` <= ?'; forecastParams.push(to);
   }
 
   // 売上実績を年月単位で集計
   // IFNULL(cost_amount, 0): 原価が未入力の売上は 0 として計算
   const [salesRows]: any = await pool.query(
     `SELECT
-       s.year_month,
+       s.\`year_month\`,
        SUM(s.amount)      AS total_amount,
        SUM(s.cost_amount) AS total_cost,
        SUM(s.amount - IFNULL(s.cost_amount, 0)) AS total_profit,
        COUNT(*)           AS sales_count
      FROM sales s
      ${whereSales}
-     GROUP BY s.year_month
-     ORDER BY s.year_month`,
+     GROUP BY s.\`year_month\`
+     ORDER BY s.\`year_month\``,
     salesParams
   );
 
@@ -76,12 +76,12 @@ router.get('/monthly-summary', async (req: any, res: any) => {
   // forecast_profit = forecast_amount × (1 - forecast_cost_rate)
   const [forecastRows]: any = await pool.query(
     `SELECT
-       f.year_month,
+       f.\`year_month\`,
        SUM(f.forecast_amount) AS total_forecast,
        SUM(f.forecast_amount * (1 - IFNULL(f.forecast_cost_rate, 0))) AS total_forecast_profit
      FROM forecasts f
      ${whereForecast}
-     GROUP BY f.year_month`,
+     GROUP BY f.\`year_month\``,
     forecastParams
   );
 
@@ -140,14 +140,14 @@ router.get('/month-comparison', async (req: any, res: any) => {
   const [rows]: any = await pool.query(
     `SELECT
        c.id AS category_id, c.name AS category_name,
-       SUM(CASE WHEN s.year_month = ? THEN s.amount ELSE 0 END)                           AS amount1,
-       SUM(CASE WHEN s.year_month = ? THEN IFNULL(s.cost_amount, 0) ELSE 0 END)           AS cost1,
-       SUM(CASE WHEN s.year_month = ? THEN s.amount - IFNULL(s.cost_amount,0) ELSE 0 END) AS profit1,
-       SUM(CASE WHEN s.year_month = ? THEN s.amount ELSE 0 END)                           AS amount2,
-       SUM(CASE WHEN s.year_month = ? THEN IFNULL(s.cost_amount, 0) ELSE 0 END)           AS cost2,
-       SUM(CASE WHEN s.year_month = ? THEN s.amount - IFNULL(s.cost_amount,0) ELSE 0 END) AS profit2
+       SUM(CASE WHEN s.\`year_month\` = ? THEN s.amount ELSE 0 END)                           AS amount1,
+       SUM(CASE WHEN s.\`year_month\` = ? THEN IFNULL(s.cost_amount, 0) ELSE 0 END)           AS cost1,
+       SUM(CASE WHEN s.\`year_month\` = ? THEN s.amount - IFNULL(s.cost_amount,0) ELSE 0 END) AS profit1,
+       SUM(CASE WHEN s.\`year_month\` = ? THEN s.amount ELSE 0 END)                           AS amount2,
+       SUM(CASE WHEN s.\`year_month\` = ? THEN IFNULL(s.cost_amount, 0) ELSE 0 END)           AS cost2,
+       SUM(CASE WHEN s.\`year_month\` = ? THEN s.amount - IFNULL(s.cost_amount,0) ELSE 0 END) AS profit2
      FROM categories c
-     LEFT JOIN sales s ON s.category_id = c.id AND s.year_month IN (?, ?)
+     LEFT JOIN sales s ON s.category_id = c.id AND s.\`year_month\` IN (?, ?)
      WHERE c.is_active = 1
      GROUP BY c.id, c.name
      ORDER BY c.sort_order`,
@@ -205,8 +205,8 @@ router.get('/actual-vs-forecast', async (req: any, res: any) => {
             THEN ROUND(IFNULL(SUM(s.amount), 0) / f.forecast_amount * 100, 2)
             ELSE NULL END AS achievement_rate
      FROM categories c
-     LEFT JOIN sales s     ON s.category_id = c.id AND s.year_month = ?
-     LEFT JOIN forecasts f ON f.category_id = c.id AND f.year_month = ?
+     LEFT JOIN sales s     ON s.category_id = c.id AND s.\`year_month\` = ?
+     LEFT JOIN forecasts f ON f.category_id = c.id AND f.\`year_month\` = ?
      WHERE c.is_active = 1
      GROUP BY c.id, c.name, f.forecast_amount, f.forecast_cost_rate
      ORDER BY c.sort_order`,
@@ -237,14 +237,14 @@ router.get('/profit-analysis', async (req: any, res: any) => {
   let where = 'WHERE 1=1';
   const params: any[] = [];
 
-  if (from)        { where += ' AND s.year_month >= ?';  params.push(from); }
-  if (to)          { where += ' AND s.year_month <= ?';  params.push(to); }
+  if (from)        { where += ' AND s.`year_month` >= ?';  params.push(from); }
+  if (to)          { where += ' AND s.`year_month` <= ?';  params.push(to); }
   if (category_id) { where += ' AND s.category_id = ?';  params.push(category_id); }
   if (product_id)  { where += ' AND s.product_id = ?';   params.push(product_id); }
 
   const [rows]: any = await pool.query(
     `SELECT
-       s.year_month,
+       s.\`year_month\`,
        c.id AS category_id, c.name AS category_name,
        p.id AS product_id,  p.name AS product_name,
        COUNT(*)              AS sales_count,
@@ -260,8 +260,8 @@ router.get('/profit-analysis', async (req: any, res: any) => {
      JOIN categories c  ON s.category_id = c.id
      LEFT JOIN products p ON s.product_id = p.id
      ${where}
-     GROUP BY s.year_month, c.id, c.name, p.id, p.name
-     ORDER BY s.year_month, total_profit DESC`,
+     GROUP BY s.\`year_month\`, c.id, c.name, p.id, p.name
+     ORDER BY s.\`year_month\`, total_profit DESC`,
     params
   );
 
@@ -289,8 +289,8 @@ router.get('/product-ranking', async (req: any, res: any) => {
   let where = 'WHERE p.id IS NOT NULL';
   const params: any[] = [];
 
-  if (from)        { where += ' AND s.year_month >= ?'; params.push(from); }
-  if (to)          { where += ' AND s.year_month <= ?'; params.push(to); }
+  if (from)        { where += ' AND s.`year_month` >= ?'; params.push(from); }
+  if (to)          { where += ' AND s.`year_month` <= ?'; params.push(to); }
   if (category_id) { where += ' AND s.category_id = ?'; params.push(category_id); }
 
   params.push(parseInt(limit as string));
