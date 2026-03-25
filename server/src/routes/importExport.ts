@@ -145,7 +145,7 @@ router.post('/sales', async (req: any, res: any) => {
     inserts.push([
       r.sale_date, year, month, ym, categoryId, productId, quantity,
       unitPrice, parseNum(r.cost_price), amount, parseNum(r.cost_amount),
-      r.customer_name || null, r.description || null,
+      r.customer_name || null, r.department || null, r.section || null, r.description || null,
     ]);
   }
 
@@ -164,8 +164,8 @@ router.post('/sales', async (req: any, res: any) => {
         await conn.query(
           `INSERT INTO sales
            (sale_date, \`year\`, \`month\`, \`year_month\`, category_id, product_id, quantity,
-            unit_price, cost_price, amount, cost_amount, customer_name, description)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            unit_price, cost_price, amount, cost_amount, customer_name, department, section, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           vals
         );
         inserted++;

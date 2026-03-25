@@ -43,6 +43,10 @@ export interface ImportRow {
   cost_amount?: string;
   /** 顧客名 — 任意 */
   customer_name?: string;
+  /** 部署名 — 任意 */
+  department?: string;
+  /** 課名 — 任意 */
+  section?: string;
   /** 備考 — 任意 */
   description?: string;
 }
@@ -112,11 +116,11 @@ export const parseCsv = (text: string): ImportRow[] => {
  * インポート用CSVのカラム順を定義する。
  */
 export const CSV_TEMPLATE_HEADER =
-  'sale_date,category_name,product_name,quantity,unit_price,cost_price,amount,cost_amount,customer_name,description';
+  'sale_date,category_name,product_name,quantity,unit_price,cost_price,amount,cost_amount,customer_name,department,section,description';
 
 /**
  * CSVテンプレートのサンプルデータ付き文字列。
  * ユーザーがダウンロードしてインポート用CSVの雛形として使用する。
  */
 export const CSV_TEMPLATE_EXAMPLE =
-  `${CSV_TEMPLATE_HEADER}\n2026-03-15,ソフトウェア,業務管理システム Basic,1,150000,30000,150000,30000,株式会社サンプル,初回導入`;
+  `${CSV_TEMPLATE_HEADER}\n2026-03-15,ソフトウェア,業務管理システム Basic,1,150000,30000,150000,30000,株式会社サンプル,営業部,第一営業課,初回導入`;
