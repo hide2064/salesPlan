@@ -55,7 +55,7 @@ function toYearMonth(date: string): string {
  *   profit_amount / profit_rate は SQL で計算して付加
  */
 router.get('/', async (req: any, res: any) => {
-  const { year_month, category_id, product_id, customer_name, department, page = '1', limit = '50' } = req.query;
+  const { year_month, category_id, product_id, customer_name, department, section, page = '1', limit = '50' } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   // メインクエリ: categories・products を JOIN して名前も取得
@@ -81,6 +81,7 @@ router.get('/', async (req: any, res: any) => {
   if (product_id)    { sql += ' AND s.product_id = ?';         params.push(product_id); }
   if (customer_name) { sql += ' AND s.customer_name LIKE ?';   params.push(`%${customer_name}%`); }
   if (department)    { sql += ' AND s.department LIKE ?';      params.push(`%${department}%`); }
+  if (section)       { sql += ' AND s.section LIKE ?';         params.push(`%${section}%`); }
 
   // 件数取得: ページネーションの総件数表示に使用
   const [countRows]: any = await pool.query(
@@ -89,7 +90,8 @@ router.get('/', async (req: any, res: any) => {
       category_id   ? ' AND s.category_id = ?'       : ''}${
       product_id    ? ' AND s.product_id = ?'        : ''}${
       customer_name ? ' AND s.customer_name LIKE ?' : ''}${
-      department    ? ' AND s.department LIKE ?'    : ''}`,
+      department    ? ' AND s.department LIKE ?'    : ''}${
+      section       ? ' AND s.section LIKE ?'       : ''}`,
     params
   );
   const total = countRows[0].total;
@@ -119,6 +121,7 @@ router.get('/by-department', async (req: any, res: any) => {
   const [rows]: any = await pool.query(
     `SELECT
        IFNULL(s.department, '（未設定）') AS department,
+       IFNULL(s.section,    '（未設定）') AS section,
        COUNT(*)                           AS sales_count,
        SUM(s.amount)                      AS total_amount,
        SUM(IFNULL(s.cost_amount, 0))      AS total_cost,
@@ -128,13 +131,14 @@ router.get('/by-department', async (req: any, res: any) => {
             ELSE 0 END AS profit_rate
      FROM sales s
      ${where}
-     GROUP BY s.department
-     ORDER BY total_amount DESC`,
+     GROUP BY s.department, s.section
+     ORDER BY department ASC, total_amount DESC`,
     params
   );
 
   res.json(rows.map((r: any) => ({
     department:   r.department,
+    section:      r.section,
     sales_count:  r.sales_count,
     total_amount: parseFloat(r.total_amount) || 0,
     total_cost:   parseFloat(r.total_cost)   || 0,
@@ -175,6 +179,7 @@ router.post(
     body('cost_amount').optional({ nullable: true }).isFloat({ min: 0 }),
     body('customer_name').optional().trim().isLength({ max: 200 }),
     body('department').optional().trim().isLength({ max: 100 }),
+    body('section').optional().trim().isLength({ max: 100 }),
     body('description').optional().trim(),
   ],
   async (req: any, res: any) => {
@@ -183,7 +188,7 @@ router.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { sale_date, category_id, product_id, quantity, unit_price, cost_price,
-            amount, cost_amount, customer_name, department, description } = req.body;
+            amount, cost_amount, customer_name, department, section, description } = req.body;
 
     // sale_date から year / month / year_month を導出
     const ym    = toYearMonth(sale_date);
@@ -193,11 +198,11 @@ router.post(
     const [result]: any = await pool.query(
       `INSERT INTO sales
        (sale_date, \`year\`, \`month\`, \`year_month\`, category_id, product_id, quantity,
-        unit_price, cost_price, amount, cost_amount, customer_name, department, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        unit_price, cost_price, amount, cost_amount, customer_name, department, section, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [sale_date, year, month, ym, category_id, product_id ?? null, quantity,
        unit_price, cost_price ?? null, amount, cost_amount ?? null,
-       customer_name ?? null, department ?? null, description ?? null]
+       customer_name ?? null, department ?? null, section ?? null, description ?? null]
     );
 
     // 挿入した行を JOIN 付きで再取得してレスポンス
@@ -238,7 +243,7 @@ router.put(
 
     // 更新を許可するフィールドのホワイトリスト (SQL インジェクション防止)
     const allowed = ['category_id', 'product_id', 'quantity', 'unit_price', 'cost_price',
-                     'amount', 'cost_amount', 'customer_name', 'department', 'description'];
+                     'amount', 'cost_amount', 'customer_name', 'department', 'section', 'description'];
     const fields: string[] = [];
     const values: any[] = [];
 

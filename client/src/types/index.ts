@@ -103,6 +103,8 @@ export interface Sale {
   customer_name: string | null;
   /** 売上を計上した部署名（任意） */
   department: string | null;
+  /** 売上を計上した課名（任意） */
+  section: string | null;
   description: string | null;
   created_at: string;
   updated_at: string;
@@ -113,6 +115,7 @@ export interface Sale {
  */
 export interface DepartmentSummary {
   department: string;
+  section: string;
   sales_count: number;
   total_amount: number;
   total_cost: number;

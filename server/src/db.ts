@@ -149,6 +149,7 @@ export async function initSchema(): Promise<void> {
         cost_amount   DECIMAL(15,2)  NULL,
         customer_name VARCHAR(200)   NULL,
         department    VARCHAR(100)   NULL,
+        section       VARCHAR(100)   NULL,
         description   TEXT           NULL,
         created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -158,6 +159,7 @@ export async function initSchema(): Promise<void> {
         INDEX idx_sales_product     (product_id),
         INDEX idx_sales_customer    (customer_name),
         INDEX idx_sales_department  (department),
+        INDEX idx_sales_section     (section),
         INDEX idx_sales_date        (sale_date),
         CONSTRAINT fk_sales_category FOREIGN KEY (category_id) REFERENCES categories(id),
         CONSTRAINT fk_sales_product  FOREIGN KEY (product_id)  REFERENCES products(id)
@@ -172,6 +174,16 @@ export async function initSchema(): Promise<void> {
     if (deptCols[0].cnt === 0) {
       await conn.query('ALTER TABLE sales ADD COLUMN department VARCHAR(100) NULL AFTER customer_name');
       await conn.query('ALTER TABLE sales ADD INDEX idx_sales_department (department)');
+    }
+
+    // 既存DBへのマイグレーション: section カラムが存在しない場合のみ追加
+    const [sectCols]: any = await conn.query(
+      `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sales' AND COLUMN_NAME = 'section'`
+    );
+    if (sectCols[0].cnt === 0) {
+      await conn.query('ALTER TABLE sales ADD COLUMN section VARCHAR(100) NULL AFTER department');
+      await conn.query('ALTER TABLE sales ADD INDEX idx_sales_section (section)');
     }
 
     // ── テーブル5: forecasts (予定売上) ─────────────────────────

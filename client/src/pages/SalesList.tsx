@@ -31,6 +31,7 @@ export default function SalesList() {
   const [productId, setProductId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [department, setDepartment] = useState('');
+  const [section, setSection] = useState('');
   const [page, setPage] = useState(1);
   const limit = 50;
 
@@ -40,13 +41,14 @@ export default function SalesList() {
 
   // 日付ベース: 売上明細一覧
   const { data, isLoading } = useQuery({
-    queryKey: ['sales', { yearMonth, categoryId, productId, customerName, department, page }],
+    queryKey: ['sales', { yearMonth, categoryId, productId, customerName, department, section, page }],
     queryFn: () => fetchSales({
       year_month:    yearMonth || undefined,
       category_id:   categoryId ? Number(categoryId) : undefined,
       product_id:    productId  ? Number(productId)  : undefined,
       customer_name: customerName || undefined,
       department:    department || undefined,
+      section:       section || undefined,
       page,
       limit,
     }),
@@ -74,11 +76,11 @@ export default function SalesList() {
   const handleExport = () => {
     if (!data) return;
     exportCsv(
-      ['日付', 'カテゴリ', '製品', '顧客名', '部署', '数量', '販売単価', '原価単価', '売上', '原価', '利益', '利益率', '備考'],
+      ['日付', 'カテゴリ', '製品', '顧客名', '部署', '課', '数量', '販売単価', '原価単価', '売上', '原価', '利益', '利益率', '備考'],
       data.data.map((s) => [
         formatDate(s.sale_date), s.category_name, s.product_name ?? '', s.customer_name ?? '',
-        s.department ?? '', s.quantity, s.unit_price, s.cost_price ?? '', s.amount,
-        s.cost_amount ?? '', s.profit_amount, s.profit_rate ?? '', s.description ?? '',
+        s.department ?? '', s.section ?? '', s.quantity, s.unit_price, s.cost_price ?? '',
+        s.amount, s.cost_amount ?? '', s.profit_amount, s.profit_rate ?? '', s.description ?? '',
       ]),
       `sales_${yearMonth || 'all'}.csv`
     );
@@ -87,8 +89,8 @@ export default function SalesList() {
   const handleDeptExport = () => {
     if (!deptData) return;
     exportCsv(
-      ['部署', '件数', '売上合計', '原価合計', '利益合計', '利益率'],
-      deptData.map((r) => [r.department, r.sales_count, r.total_amount, r.total_cost, r.total_profit, `${r.profit_rate}%`]),
+      ['部署', '課', '件数', '売上合計', '原価合計', '利益合計', '利益率'],
+      deptData.map((r) => [r.department, r.section, r.sales_count, r.total_amount, r.total_cost, r.total_profit, `${r.profit_rate}%`]),
       `sales_by_dept_${yearMonth || 'all'}.csv`
     );
   };
@@ -172,6 +174,12 @@ export default function SalesList() {
                 onChange={(e) => { setDepartment(e.target.value); resetPage(); }}
                 className="border rounded px-2 py-1 text-sm" placeholder="部分一致" />
             </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">課</label>
+              <input type="text" value={section}
+                onChange={(e) => { setSection(e.target.value); resetPage(); }}
+                className="border rounded px-2 py-1 text-sm" placeholder="部分一致" />
+            </div>
           </div>
 
           {isLoading ? <LoadingSpinner /> : (
@@ -188,6 +196,7 @@ export default function SalesList() {
                       <th className="text-left p-2">製品</th>
                       <th className="text-left p-2">顧客名</th>
                       <th className="text-left p-2">部署</th>
+                      <th className="text-left p-2">課</th>
                       <th className="text-right p-2">数量</th>
                       <th className="text-right p-2">販売単価</th>
                       <th className="text-right p-2">原価単価</th>
@@ -199,7 +208,7 @@ export default function SalesList() {
                   </thead>
                   <tbody>
                     {data?.data.length === 0 && (
-                      <tr><td colSpan={12} className="text-center py-8 text-gray-400">データがありません</td></tr>
+                      <tr><td colSpan={13} className="text-center py-8 text-gray-400">データがありません</td></tr>
                     )}
                     {data?.data.map((s) => (
                       <tr key={s.id} className="border-t hover:bg-gray-50">
@@ -210,6 +219,11 @@ export default function SalesList() {
                         <td className="p-2">
                           {s.department
                             ? <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">{s.department}</span>
+                            : <span className="text-gray-300">-</span>}
+                        </td>
+                        <td className="p-2">
+                          {s.section
+                            ? <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs">{s.section}</span>
                             : <span className="text-gray-300">-</span>}
                         </td>
                         <td className="p-2 text-right">{s.quantity}</td>
@@ -267,6 +281,7 @@ export default function SalesList() {
                   <thead>
                     <tr className="bg-gray-50 text-gray-600 text-xs">
                       <th className="text-left p-3">部署</th>
+                      <th className="text-left p-3">課</th>
                       <th className="text-right p-3">件数</th>
                       <th className="text-right p-3">売上合計</th>
                       <th className="text-right p-3">原価合計</th>
@@ -276,12 +291,15 @@ export default function SalesList() {
                   </thead>
                   <tbody>
                     {deptData?.length === 0 && (
-                      <tr><td colSpan={6} className="text-center py-8 text-gray-400">データがありません</td></tr>
+                      <tr><td colSpan={7} className="text-center py-8 text-gray-400">データがありません</td></tr>
                     )}
                     {deptData?.map((r) => (
-                      <tr key={r.department} className="border-t hover:bg-gray-50">
+                      <tr key={`${r.department}-${r.section}`} className="border-t hover:bg-gray-50">
                         <td className="p-3 font-medium">
                           <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">{r.department}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-xs">{r.section}</span>
                         </td>
                         <td className="p-3 text-right text-gray-600">{r.sales_count} 件</td>
                         <td className="p-3 text-right font-medium">{formatCurrency(r.total_amount)}</td>
@@ -302,7 +320,7 @@ export default function SalesList() {
                     return (
                       <tfoot>
                         <tr className="bg-gray-100 font-semibold text-sm border-t-2 border-gray-300">
-                          <td className="p-3">合計</td>
+                          <td className="p-3" colSpan={2}>合計</td>
                           <td className="p-3 text-right">{totCount} 件</td>
                           <td className="p-3 text-right">{formatCurrency(totAmount)}</td>
                           <td className="p-3 text-right">{formatCurrency(totCost)}</td>

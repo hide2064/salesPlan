@@ -28,6 +28,8 @@ export interface SaleFilters {
   customer_name?: string;
   /** 部署名（部分一致） */
   department?: string;
+  /** 課名（部分一致） */
+  section?: string;
   /** ページ番号（1始まり） */
   page?: number;
   /** 1ページあたりの件数 */
